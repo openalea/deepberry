@@ -4,7 +4,7 @@ import cv2
 import os
 import pandas as pd
 
-from grapeberry.src.utils import ellipse_interpolation, nms
+from deepberry.src.openalea.deepberry.utils import ellipse_interpolation, nms
 
 from keras.models import load_model
 from keras import backend as K

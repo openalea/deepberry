@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import time
 
-from grapevine.prediction import detect_berry, segment_berry_scaled, classify_berry, MODEL_SEG_SCALED, MODEL_DET
+from deepberry.src.openalea.deepberry.prediction import detect_berry, segment_berry_scaled, classify_berry, MODEL_SEG_SCALED, MODEL_DET
 
 PATH = 'data/grapevine/results/'
 

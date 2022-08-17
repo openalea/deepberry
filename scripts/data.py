@@ -18,9 +18,12 @@ import numpy as np
 import shutil
 import matplotlib.pyplot as plt
 import pandas as pd
+import cv2
 
 import time
 import datetime
+
+from deepberry.src.openalea.deepberry.utils import ellipse_interpolation
 
 
 def date_to_timestamp(date):
@@ -92,7 +95,6 @@ for plantid in df['plantid'].unique():
 df21 = df.copy()
 
 # ===== 2022 experiment =====
-# TODO : exp still running, Verify everything is ok at the end of the experiment !! (plantcodes should not change)
 
 df = pd.read_csv('data/copy_from_database/images_grapevine22.csv')
 df_plant = pd.read_csv('data/copy_from_database/plants_grapevine22.csv')
@@ -164,27 +166,47 @@ for i, (_, row) in enumerate(selec.iterrows()):
     path2 = 'data/grapevine/grapevine22/{}.png'.format(row['acquisitiondate']).replace(':', '-')
     shutil.copyfile(path1, path2)
 
-# ==== convert images to gif =======================================================================================
+# ==== create gif =======================================================================================
+# full gif script for angle
 
-import cv2
-from PIL import Image
-f = 'data/grapevine/grapevine22/'
-imgs = [cv2.cvtColor(cv2.imread(f + p), cv2.COLOR_BGR2RGB) for p in os.listdir(f)]
+plantid = 7243
+exp = 'DYN2020-05-15'
+task = 2505
+
+df_img = pd.read_csv('data/grapevine/image_index.csv')
+s_img = df_img[(df_img['exp'] == exp) & (df_img['plantid'] == plantid) & (df_img['taskid'] == task)]
+
+df_ell = pd.read_csv('data/grapevine/results/full_results.csv')
+s_ell = df_ell[(df_ell['exp'] == exp) & (df_ell['plantid'] == plantid) & (df_ell['task'] == task)]
 
 imgs_gif = []
-for img0, filename in zip(imgs, os.listdir(f)):
-    img = img0.copy()
-    filename = filename[:-7]
-    filename = filename[:-3] + 'h' + filename[-2:]
+for _, row in s_img.iterrows():
+
+    path1 = 'V:/{}/{}/{}.png'.format(row['exp'], int(row['taskid']), row['imgguid'])
+    img = cv2.cvtColor(cv2.imread(path1), cv2.COLOR_BGR2RGB)
+
+    ellipses = s_ell[s_ell['timestamp'] == row['timestamp']]
+
+    for _, ell in ellipses.iterrows():
+        x, y, w, h, a = ell[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
+        lsp_x, lsp_y = ellipse_interpolation(x=x, y=y, w=w, h=h, a=a, n_points=100)
+        img = cv2.polylines(img, [np.array([lsp_x, lsp_y]).T.astype('int32')], True, (255, 0, 0), 5)
+
     img[:150] *= 0
-    img = cv2.putText(img, filename, (400, 120), cv2.FONT_HERSHEY_SIMPLEX, 4, (255, 255, 255), 5, cv2.LINE_AA)
+    txt = 'camera angle = {}'.format(int(row['imgangle']))
+    img = cv2.putText(img, txt, (300, 120), cv2.FONT_HERSHEY_SIMPLEX, 4, (255, 255, 255), 5, cv2.LINE_AA)
+
+    path2 = 'data/grapevine/gif2/{}.png'.format(int(row['imgangle']))
+    plt.imsave(path2, img)
+
     imgs_gif.append(img)
 
-#imgs_gif = [img[200:-200, 250:-250, :] for img in imgs_gif]
 imgs_gif = [Image.fromarray(np.uint8(img)) for img in imgs_gif]
-fps = 6
-imgs_gif[0].save('data/grapevine/2020_7243_a120_{}fps.gif'.format(fps), save_all=True, append_images=imgs_gif[1:],
+fps = 2
+imgs_gif[0].save('data/grapevine/2020_7243_task2505_{}fps.gif'.format(fps), save_all=True, append_images=imgs_gif[1:],
                  optimize=True, duration=1000/fps, loop=0)
+
+
 
 # ===== image frequency / exp ======================================================================================
 

@@ -4,7 +4,10 @@ import numpy as np
 import cv2
 import pandas as pd
 
-from grapevine.utils import ellipse_interpolation, get_image_path
+from sklearn.mixture import GaussianMixture
+from sklearn.cluster import KMeans
+
+from deepberry.src.openalea.deepberry.utils import ellipse_interpolation, get_image_path
 
 
 PATH = 'data/grapevine/results/'
@@ -34,7 +37,9 @@ for exp in index['exp'].unique():
 df = pd.concat(df)
 
 df['area'] = (df['ell_w'] / 2) * (df['ell_h'] / 2) * np.pi
-df['ratio'] = np.max(df[['ell_w', 'ell_h']], axis=1) / np.min(df[['ell_w', 'ell_h']], axis=1)
+df['roundness'] = df['ell_w'] / df['ell_h']  # always h > w
+
+df.to_csv(PATH + 'full_results.csv', index=False)
 
 # gb = df.groupby('genotype')['plantid'].nunique().sort_values().reset_index()
 # genotypes = list(gb[gb['plantid'] >= 6]['genotype'])
@@ -66,27 +71,115 @@ for _, ell in ellipses.iterrows():
 
 # ===== high frequency 2020 =========================================================================================
 
-selec = df[(df['exp'] == 'DYN2020-05-15') & (df['plantid'] == 7243)]
+plantid = 7243
+
+selec = df[(df['exp'] == 'DYN2020-05-15') & (df['plantid'] == plantid)]
 selec = selec.sort_values('timestamp', ascending=False)
 selec = selec[~(selec['task'].isin([2377, 2379]))]
+selec['black'] = selec['black'].astype(int) * 100
+selec['t'] = (selec['timestamp'] - min(selec['timestamp'])) / 3600 / 24
 
-gb = selec.groupby('task')[['area', 'timestamp']].mean().reset_index().sort_values('timestamp')
-plt.figure()
-plt.title('Area')
-plt.plot(gb['timestamp'], gb['area'], '-k.')
+from pylab import *
+from scipy.optimize import curve_fit
+from scipy.stats import norm
+def gauss(x, mu, sigma, A):
+    return A * exp(-(x - mu) ** 2 / 2 / sigma ** 2)
+def bimodal(x, mu1, sigma1, A1, mu2, sigma2, A2):
+    return gauss(x, mu1, sigma1, A1) + gauss(x, mu2, sigma2, A2)
 
-gb = selec.groupby('task')[['ratio', 'timestamp']].mean().reset_index().sort_values('timestamp')
-plt.figure()
-plt.title('Ratio')
-plt.plot(gb['timestamp'], gb['ratio'], '-k.')
+ar = selec['area']
+y, x = np.histogram(ar, 500, weights=np.ones_like(ar)/float(len(ar)))
+x = (x[1:] + x[:-1]) / 2  # for len(x)==len(y)
+y *= len(ar)
+plt.plot(x, y, 'k-')
+expected = (np.mean(ar) / 7, np.std(ar) / 7, len(ar) / 30,
+            np.mean(ar), np.std(ar) / 2, len(ar) / 30)
+params, cov = curve_fit(bimodal, x, y, expected)
+sigma = sqrt(diag(cov))
+threshold = norm.ppf(.999) * params[1] + params[0]
+plt.plot(x, bimodal(x, *params), color='red', lw=3)
+plt.plot([threshold]*2, [0, max(bimodal(x, *params))], color='green', lw=3)
+selec['small'] = selec['area'] < threshold
 
-gb = selec.groupby('task')[['timestamp', 'black']].agg(['sum', 'size'])
-gb['t_mean'] = gb['timestamp']['sum'] / gb['timestamp']['size']
-gb['black_mean'] = gb['black']['sum'] / gb['black']['size']
-gb = gb.sort_values('t_mean')
+# berry histogram
 plt.figure()
-plt.title('% Black')
-plt.plot(gb['t_mean'], gb['black_mean'], '-k.')
+plt.xlabel('berry area (px²)')
+plt.xlim((0, 8000))
+plt.hist(selec['area'], bins=500)
+
+# small vs large berry
+selec['area_quantile'] = None
+selec.index = np.arange(len(selec))
+for task in np.unique(selec['task'])[::10]:
+    s = selec[selec['task'] == task]
+    n = 20  # how many subdivisions
+    quantiles = np.quantile(s['area'], [k * (1 / n) for k in range(1, n)])
+    quantiles = [float('-inf')] + list(quantiles) + [float('+inf')]
+    for k in range(n):
+        s2 = s[(quantiles[k] <= s['area']) & (s['area'] < quantiles[k + 1])]
+        selec.at[s2.index, 'area_quantile'] = k
+
+plt.subplot(3, 1, 1)
+var = 'area'
+plt.ylabel('Mean berry area (px²)')
+gb = selec.groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
+plt.plot(gb['t'], gb[var], 'k.-')
+gb = selec[selec['small']].groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
+plt.plot(gb['t'], gb[var], '-', color='green')
+gb = selec[~selec['small']].groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
+plt.plot(gb['t'], gb[var], '-', color='orange')
+plt.subplot(3, 1, 2)
+var = 'roundness'
+plt.ylabel('Mean berry roundness')
+gb = selec.groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
+plt.plot(gb['t'], gb[var], 'k.-')
+gb = selec[selec['small']].groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
+plt.plot(gb['t'], gb[var], '-', color='green')
+gb = selec[~selec['small']].groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
+plt.plot(gb['t'], gb[var], '-', color='orange')
+plt.subplot(3, 1, 3)
+var = 'black'
+plt.xlabel('Time (days)')
+plt.ylabel('Proportion of black berries (%)')
+gb = selec.groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
+plt.plot(gb['t'], gb[var], 'k.-')
+gb = selec[selec['small']].groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
+plt.plot(gb['t'], gb[var], '-', color='green')
+gb = selec[~selec['small']].groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
+plt.plot(gb['t'], gb[var], '-', color='orange')
+
+tasks = np.unique(selec.sort_values('timestamp')['task'])
+tasks = tasks[[0, int(len(tasks) / 3.5), -1]]
+for k in range(3):
+    plt.subplot(3, 1, k + 1)
+    plt.xlim((0, 7000))
+    s = selec[selec['task'] == tasks[k]]
+    plt.hist(s['area'], bins=50)
+    print('t = {} days, mean = {} px²'.format(round(s.iloc[0]['t'], 1), round(np.mean(s['area']), 1)))
+plt.xlabel('Berry area (px²)')
+
+var = 'roundness'
+secondary_var = 'plantid'
+plt.figure()
+for q in sorted(selec[secondary_var].unique()):
+    s = selec[selec[secondary_var] == q]
+    gb = s.groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
+    plt.plot(gb['t'], gb[var], '-', label=q)
+gb = selec.groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
+plt.plot(gb['t'], gb[var], '-r.')
+plt.legend()
+
+
+var = 'roundness'
+gb = selec.groupby('angle')[[var]].mean().reset_index().sort_values('angle')
+plt.plot(gb['angle'], gb[var])
+
+angles = [0, 60, 120, 180, 240, 300]
+gb = selec.groupby(['angle', 'timestamp']).size().reset_index().sort_values('timestamp')
+for angle in angles:
+    s = gb[gb['angle'] == angle]
+    plt.plot(s['timestamp'], s[0], label=angle)
+plt.legend()
 
 # ===== GxE =========================================================================================================
 
@@ -174,10 +267,10 @@ for plantid in selec['plantid'].unique():
         s2 = s[s['task'] == task]
         area = s2['area']
         black = 100 * (np.sum(s2['black']) / len(s2))
-        ratio = np.max(s2[['ell_w', 'ell_h']], axis=1) / np.min(s2[['ell_w', 'ell_h']], axis=1)
+        #roundness = np.max(s2[['ell_w', 'ell_h']], axis=1) / np.min(s2[['ell_w', 'ell_h']], axis=1)
         df_trait.append([s.iloc[0]['genotype'], s.iloc[0]['scenario'], plantid, task, t,
-                         len(area), np.median(area), np.std(area), np.median(ratio), black])
-df_trait = pd.DataFrame(df_trait, columns=['genotype', 'scenario', 'plantid', 'task', 'timestamp', 'n', 'area_med', 'area_std', 'ratio_med', 'black'])
+                         len(area), np.median(area), np.std(area), np.median(roundness), black])
+df_trait = pd.DataFrame(df_trait, columns=['genotype', 'scenario', 'plantid', 'task', 'timestamp', 'n', 'area_med', 'area_std', 'roundness_med', 'black'])
 
 # AREA
 for genotype in genotypes:

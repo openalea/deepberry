@@ -217,9 +217,6 @@ def classify_berry(image, ellipses):
     return res
 
 
-# ===============================================================================================================
-
-
 def dice_coef(y_true, y_pred, smooth=1e-3):
     y_true_f = K.flatten(y_true)
     y_pred_f = K.flatten(y_pred)
@@ -227,15 +224,23 @@ def dice_coef(y_true, y_pred, smooth=1e-3):
     return K.mean((2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth))
 
 
-# yolov4 object detection model
-weights_path = 'data/grapevine/validation/backup7/config_1class_25500.weights'
-config_path = 'data/grapevine/config_1class.cfg'
-net = cv2.dnn.readNetFromDarknet(config_path, weights_path)
-MODEL_DET = cv2.dnn_DetectionModel(net)
+def load_models_berry(path):
 
-# U-net segmentation model
-MODEL_SEG = load_model('data/grapevine/UNET_VGG16_RGB_normal.h5', custom_objects={'dice_coef': dice_coef})
-MODEL_SEG_SCALED = load_model('data/grapevine/UNET_VGG16_RGB_scaled.h5', custom_objects={'dice_coef': dice_coef})
+    # yolov4 object detection model
+    weights_path = path + '/detection.weights'
+    config_path = path + '/detection.cfg'
+    net = cv2.dnn.readNetFromDarknet(config_path, weights_path)
+    model_det = cv2.dnn_DetectionModel(net)
+
+    # U-net segmentation model
+    model_seg = load_model(path + '/segmentation.h5', custom_objects={'dice_coef': dice_coef})
+
+    return model_det, model_seg
+
+# ===============================================================================================================
+
+
+#MODEL_SEG = load_model('data/grapevine/UNET_VGG16_RGB_normal.h5', custom_objects={'dice_coef': dice_coef})
 
 
 if __name__ == '__main__':

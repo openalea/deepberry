@@ -4,7 +4,9 @@ import cv2
 import numpy as np
 import time
 
-from deepberry.src.openalea.deepberry.prediction import detect_berry, segment_berry_scaled, classify_berry, MODEL_SEG_SCALED, MODEL_DET
+from deepberry.src.openalea.deepberry.prediction import detect_berry, segment_berry_scaled, classify_berry, load_models_berry
+
+MODEL_DET, MODEL_SEG = load_models_berry('deepberry_data/')
 
 PATH = 'data/grapevine/results/'
 
@@ -59,7 +61,7 @@ for plantid in [int(p) for p in selec['plantid'].unique()]:
                 t0 = time.time()
                 res_det = detect_berry(image=img, model=MODEL_DET)
                 t1 = time.time()
-                res_seg, _ = segment_berry_scaled(image=img, model=MODEL_SEG_SCALED, boxes=res_det)
+                res_seg, _ = segment_berry_scaled(image=img, model=MODEL_SEG, boxes=res_det)
                 t2 = time.time()
                 res_classif = classify_berry(image=img, ellipses=res_seg)
                 t3 = time.time()

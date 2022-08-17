@@ -1,10 +1,9 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import cv2
-import os
 import pandas as pd
 
-from deepberry.src.openalea.deepberry.utils import ellipse_interpolation, nms
+#from deepberry.src.openalea.deepberry.utils import ellipse_interpolation, nms
+from openalea.deepberry.utils import ellipse_interpolation, nms
 
 from keras.models import load_model
 from keras import backend as K
@@ -40,7 +39,7 @@ def detect_berry(image, model, vignette_size=(416, 416), px_spacing=270,
     return res_nms
 
 
-def segment_berry(image, model, boxes, dim_ratio_threshold=2., seg_size=128):
+def segment_berry(image, model, boxes, dim_ratio_threshold=2., seg_size=128, score_threshold=0.95):
 
     res = []
     res_ellipse = {'raw': [], 'fit': []}
@@ -240,6 +239,8 @@ MODEL_SEG_SCALED = load_model('data/grapevine/UNET_VGG16_RGB_scaled.h5', custom_
 
 
 if __name__ == '__main__':
+
+    import matplotlib.pyplot as plt
 
     # ===== run prediction ======================================================================================
 

@@ -28,7 +28,7 @@ package_dir = dict([('', pkg_root_dir)] +
                     for pkg in top_pkgs])
 
 setup(
-    name="openalea.grapeberry",
+    name="openalea.deepberry",
     version="0.0.1",
     description="",
     long_description="",

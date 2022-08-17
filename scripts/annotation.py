@@ -30,7 +30,7 @@ import os
 import pandas as pd
 from skimage import io
 
-from grapeberry.src.utils import hsv_variation, adjust_contrast_brightness, ellipse_interpolation
+from deepberry.src.openalea.deepberry.utils import hsv_variation, adjust_contrast_brightness, ellipse_interpolation
 
 PATH = 'data/grapevine/dataset/'
 
@@ -56,8 +56,13 @@ new_valid = ['DYN2020-05-15_7244_2636_330.png',
 
 anot_files = os.listdir(PATH + 'annotation/')
 
+#shape = anot['shapes'][34]
+#file = 'DYN2020-05-15_7244_2636_330.json'
+#plt.xlim((1520, 1590))
+#plt.ylim((1635, 1703))
+
 df = []
-for file in anot_files:
+for file in anot_files[::15]:
 
     img = plt.imread(PATH + 'images/' + file.replace('.json', '.png'))
     plt.figure(file)
@@ -68,6 +73,7 @@ for file in anot_files:
         anot = json.load(f)
 
     for shape in anot['shapes']:
+
         x_anot = np.array(shape['points'])[:, 0].reshape([-1, 1])
         y_anot = np.array(shape['points'])[:, 1].reshape([-1, 1])
 
@@ -83,8 +89,9 @@ for file in anot_files:
         xmin, xmax, ymin, ymax = np.min(lsp_x), np.max(lsp_x), np.min(lsp_y), np.max(lsp_y)
         box_x, box_y, box_w, box_h = (xmax + xmin) / 2, (ymax + ymin) / 2, xmax - xmin, ymax - ymin
 
-        plt.plot(lsp_x, lsp_y, 'darkorange')
-        plt.plot([xmin, xmin, xmax, xmax, xmin], [ymin, ymax, ymax, ymin, ymin], 'b-')
+        #plt.plot(list(x_anot) + [x_anot[0]], list(y_anot) + [y_anot[0]], 'ro-')
+        plt.plot(lsp_x, lsp_y, 'blue')
+        #plt.plot([xmin, xmin, xmax, xmax, xmin], [ymin, ymax, ymax, ymin, ymin], 'b-')
 
         df.append([ell_x, ell_y, ell_w, ell_h, ell_a, box_x, box_y, box_w, box_h, file.replace('.json', '.png')])
 

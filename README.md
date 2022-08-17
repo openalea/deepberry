@@ -1,3 +1,3 @@
 # grapeberry
 
-deep learning algorithm for grapevine berry detection and segmentation
+deep learning algorithm for grapewine berry detection and segmentation

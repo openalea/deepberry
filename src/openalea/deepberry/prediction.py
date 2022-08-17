@@ -2,8 +2,8 @@ import numpy as np
 import cv2
 import pandas as pd
 
-#from deepberry.src.openalea.deepberry.utils import ellipse_interpolation, nms
-from openalea.deepberry.utils import ellipse_interpolation, nms
+from deepberry.src.openalea.deepberry.utils import ellipse_interpolation, nms
+#from openalea.deepberry.utils import ellipse_interpolation, nms
 
 from keras.models import load_model
 from keras import backend as K
@@ -252,7 +252,7 @@ if __name__ == '__main__':
     # files = [f for f in os.listdir(img_folder) if 'png' in f]
     # files.sort(key=lambda f: int(f.split('_')[0]))
 
-    path = 'V:/ARCH2022-05-18/5888/6014a4f5-492d-41e1-83f7-3223ce627538.png'
+    path = 'V:/DYN2020-05-15/2488/d715d002-1c05-4d7e-b6b2-581aca86d88f.png'
 
     img = cv2.imread(path)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)

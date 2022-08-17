@@ -1,3 +1,0 @@
-detection.weights : validation/backup7/config_1class_25500.weights
-detection.cfg : config_1class.cfg
-segmentation.h5 : UNET_VGG16_RGB_scaled.h5

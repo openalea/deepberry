@@ -123,8 +123,8 @@ def segment_berry_scaled(image, model, boxes, seg_size=128):
         zoom = (seg_size * scale_factor) / np.max((w, h))
 
         ds = int(seg_size / 2)
-        ya, yb = y_vignette - round(ds / zoom), y_vignette + round(ds / zoom)
-        xa, xb = x_vignette - round(ds / zoom), x_vignette + round(ds / zoom)
+        ya, yb = int(y_vignette - round(ds / zoom)), int(y_vignette + round(ds / zoom))
+        xa, xb = int(x_vignette - round(ds / zoom)), int(x_vignette + round(ds / zoom))
 
         # check if box is not too close from image border
         condition1 = (ds < y_vignette < image.shape[0] - ds) and (ds < x_vignette < image.shape[1] - ds)

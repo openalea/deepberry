@@ -6,10 +6,10 @@ import time
 
 from deepberry.src.openalea.deepberry.prediction import detect_berry, segment_berry_scaled, classify_berry, load_models_berry
 
-PATH_DATA = 'home/daviet/deepberry_data/'
-PATH_CACHE = ''
+PATH_DATA = '/home/daviet/deepberry_data/'
+PATH_CACHE = '/mnt/data/phenoarch_cache/'
 
-MODEL_DET, MODEL_SEG = load_models_berry('deepberry_data/')
+MODEL_DET, MODEL_SEG = load_models_berry(PATH_DATA)
 
 index = pd.read_csv(PATH_DATA + 'image_index.csv')
 
@@ -23,8 +23,9 @@ df = index[~index['imgangle'].isna()]
 # selec = df2[df2['g2'].isin(genotypes)]
 
 exp = 'DYN2020-05-15'
-if not os.path.isdir(PATH + exp):
-    os.mkdir(PATH + exp)
+cache_path = PATH_CACHE + 'cache_{}/'.format(exp)
+if not os.path.isdir(cache_path):
+    os.mkdir(cache_path)
 
 # TODO typo exp vs manip
 selec = df[df['exp'] == exp]
@@ -35,17 +36,14 @@ for plantid in [int(p) for p in selec['plantid'].unique()]:
 
     s = s.sort_values('timestamp')
 
-    plantid_path = PATH + '{}/{}/'.format(exp, plantid)
+    plantid_path = cache_path + str(plantid) + '/'
     if not os.path.isdir(plantid_path):
         os.mkdir(plantid_path)
 
     for _, row in s.iterrows():
 
-        n_files = sum([len(os.listdir(PATH + exp + '/' + id)) for id in os.listdir(PATH + exp)])
-        print(exp, n_files)
-
         savefile = plantid_path + '{}_{}.csv'.format(int(row['taskid']), int(row['imgangle']))
-        img_path = 'V:/{}/{}/{}.png'.format(row['exp'], int(row['taskid']), row['imgguid'])
+        img_path = '/mnt/phenomixNas/{}/{}/{}.png'.format(row['exp'], int(row['taskid']), row['imgguid'])
 
         if not os.path.isfile(savefile):
 
@@ -62,7 +60,7 @@ for plantid in [int(p) for p in selec['plantid'].unique()]:
                 t0 = time.time()
                 res_det = detect_berry(image=img, model=MODEL_DET)
                 t1 = time.time()
-                res_seg, _ = segment_berry_scaled(image=img, model=MODEL_SEG_SCALED, boxes=res_det)
+                res_seg, _ = segment_berry_scaled(image=img, model=MODEL_SEG, boxes=res_det)
                 t2 = time.time()
                 res_classif = classify_berry(image=img, ellipses=res_seg)
                 t3 = time.time()

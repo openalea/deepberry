@@ -4,7 +4,12 @@ import cv2
 import numpy as np
 import time
 
+from multiprocessing import Pool
+
 from deepberry.src.openalea.deepberry.prediction import detect_berry, segment_berry_scaled, classify_berry, load_models_berry
+
+# disable multi CPU in opencv2. necessary to run deep-learning (opencv2) and multi-processing at the same time
+# cv2.setNumThreads(0)
 
 PATH_DATA = '/home/daviet/deepberry_data/'
 PATH_CACHE = '/mnt/data/phenoarch_cache/'
@@ -15,25 +20,17 @@ index = pd.read_csv(PATH_DATA + 'image_index.csv')
 
 df = index[~index['imgangle'].isna()]
 
-# ===============================================================================================================
-
-# # genotype with most plants
-# genotypes = list(df.groupby('genotype').size().reset_index().sort_values(0)['g2'])[::-1]
-# #genotypes = ['BARESA', 'BASERRI', 'BELLONE', 'PRIMITIV', 'A02-PL6']
-# selec = df2[df2['g2'].isin(genotypes)]
-
 exp = 'DYN2020-05-15'
 cache_path = PATH_CACHE + 'cache_{}/'.format(exp)
 if not os.path.isdir(cache_path):
     os.mkdir(cache_path)
 
-# TODO typo exp vs manip
-selec = df[df['exp'] == exp]
+exp_df = df[df['exp'] == exp]
 
-for plantid in [int(p) for p in selec['plantid'].unique()]:
 
-    s = selec[selec['plantid'] == plantid]
+def run_one_plant(plantid):
 
+    s = exp_df[exp_df['plantid'] == plantid]
     s = s.sort_values('timestamp')
 
     plantid_path = cache_path + str(plantid) + '/'
@@ -65,10 +62,27 @@ for plantid in [int(p) for p in selec['plantid'].unique()]:
                 res_classif = classify_berry(image=img, ellipses=res_seg)
                 t3 = time.time()
 
-                print('det: {:.1f}s, seg: {:.1f}s, classif: {:.1f}s (n={}, black={}%)'.format(
+                print('{} | det: {:.1f}s, seg: {:.1f}s, classif: {:.1f}s (n={}, black={}%)'.format(plantid,
                     t1 - t0, t2 - t1, t3 - t2, len(res_classif), round(100*np.sum(res_classif['black'])/len(res_classif), 1)))
 
                 res_classif.to_csv(savefile, index=False)
+
+
+def mp_full_exp(plantids, nb_cpu=11):
+
+    with Pool(nb_cpu) as p:
+        p.map(run_one_plant, plantids)
+
+# ===============================================================================================================
+
+plantids = [int(p) for p in exp_df['plantid'].unique()]
+print(len(plantids))
+for plantid in plantids:
+    run_one_plant(plantid)
+#mp_full_exp(plantids, nb_cpu=5)
+
+
+
 
 
 

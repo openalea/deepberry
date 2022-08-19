@@ -6,35 +6,117 @@ import cv2
 from scipy.optimize import minimize, basinhopping
 import os
 
+from deepberry.src.openalea.deepberry.prediction import ellipse_interpolation
+
 from functools import partial
+
 from pycpd import AffineRegistration, RigidRegistration, DeformableRegistration
-import numpy as np
+
+from shapely.geometry import box, Polygon
+
+
+# TODO use it in DL codes if it's faster ? (nms)
+def IOU(pol1_xy, pol2_xy):
+    """
+    https://stackoverflow.com/questions/58435218/intersection-over-union-on-non-rectangular-quadrilaterals
+    """
+    # Define each polygon
+    polygon1_shape = Polygon(pol1_xy)
+    polygon2_shape = Polygon(pol2_xy)
+
+    # Calculate intersection and union, and the IOU
+    polygon_intersection = polygon1_shape.intersection(polygon2_shape).area
+    polygon_union = polygon1_shape.area + polygon2_shape.area - polygon_intersection
+    return polygon_intersection / polygon_union
 
 
 PATH = 'data/grapevine/results/'
-ellipse_path = PATH + 'ellipse_old/'
-plant_index = pd.read_csv(PATH + 'image_index_old.csv')
 
-plantid = int(os.listdir(ellipse_path)[0])
+#plant_index = pd.read_csv(PATH + 'image_index_old.csv')
 
-df = []
-for f in os.listdir(ellipse_path + str(plantid)):
-    dfi = pd.read_csv(ellipse_path + '{}/{}'.format(plantid, f))
-    dfi[['task', 'angle']] = [int(k) for k in f[:-4].split('_')]
-    df.append(dfi)
-df = pd.concat(df)
+df = pd.read_csv(PATH + 'full_results.csv')
+
+plantid = 7236
+selec = df[df['plantid'] == plantid]
 
 # angle with most berries
-angle = df.groupby('angle').size().sort_values().reset_index()['angle'].iloc[-1]
+angle = selec.groupby('angle').size().sort_values().reset_index()['angle'].iloc[-1]
+selec = selec[selec['angle'] == angle]
 
-selec = df[df['angle'] == angle]
-tasks = sorted(selec['task'].unique())
+tasks = list(selec.groupby('task')['timestamp'].mean().reset_index().sort_values('timestamp')['task'])
 for i in range(len(tasks) - 1):
+
+    # i = 140
+    i = 139
+
     s1 = selec[selec['task'] == tasks[i]]
     s2 = selec[selec['task'] == tasks[i + 1]]
 
-    plt.plot(s1['ell_x'], s1['ell_y'], 'r*')
-    plt.plot(s2['ell_x'], s2['ell_y'], 'b*')
+    plt.figure()
+    plt.gca().set_aspect('equal', adjustable='box')
+    for s, color in zip([s1, s2], ['r', 'b']):
+        for _, ell in s.iterrows():
+            x, y, w, h, a = ell[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
+            lsp_x, lsp_y = ellipse_interpolation(x=x, y=y, w=w, h=h, a=a, n_points=20)
+            plt.plot(lsp_x, lsp_y, color + '-')
+
+    ellipses1 = [ellipse_interpolation(e['ell_x'], e['ell_y'], e['ell_w'], e['ell_h'], e['ell_a'], n_points=20)
+     for _, e in s1.iterrows()]
+    ellipses2 = [ellipse_interpolation(e['ell_x'], e['ell_y'], e['ell_w'], e['ell_h'], e['ell_a'], n_points=20)
+                 for _, e in s2.iterrows()]
+
+    ell1 = ellipses1[0]
+    ell2 = ellipses2[5]
+    plt.plot(ell1[0], ell1[1], 'b-')
+    plt.plot(ell2[0], ell2[1], 'r-')
+    d = IOU(ell1.T, ell2.T)
+
+    # distance matrix
+    D = np.zeros((len(ellipses1), len(ellipses2)))
+    for i, ell1 in enumerate(ellipses1):
+        for j, ell2 in enumerate(ellipses2):
+            d = IOU(ell1.T, ell2.T)
+            d2 = ell1[['ell_x', 'ell_y']] - ell2[['ell_x', 'ell_y']]
+            d = d if d != 0 else
+            D[i, j] = d
+
+    # pairwise matches
+    seg_pairs = []
+    for k in range(5):
+        i_min, j_min = np.unravel_index(D.argmin(), D.shape)
+        seg_pairs.append([segs1[i_min], segs2[j_min]])
+        D[i_min, :] = float('inf')
+        D[:, j_min] = float('inf')
+    seg_pairs = np.array(seg_pairs)
+
+    # ===== Point Set Registration ======
+
+    X = np.array(s1[['ell_x', 'ell_y']])
+    Y = np.array(s2[['ell_x', 'ell_y']])
+
+    def visualize(iteration, error, X, Y, ax):
+        plt.cla()
+        ax.scatter(X[:, 0],  X[:, 1], color='red', label='Target')
+        ax.scatter(Y[:, 0],  Y[:, 1], color='blue', label='Source')
+        plt.text(0.87, 0.92, 'Iteration: {:d}\nQ: {:06.4f}'.format(
+            iteration, error), horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, fontsize='x-large')
+        ax.legend(loc='upper left', fontsize='x-large')
+        plt.draw()
+        plt.pause(0.1)
+
+    fig = plt.figure()
+    fig.add_axes([0, 0, 1, 1])
+    callback = partial(visualize, ax=fig.axes[0])
+
+    # reg = AffineRegistration(**{'X': X, 'Y': Y})
+    reg = AffineRegistration(**{'X': X, 'Y': Y})
+    # reg = DeformableRegistration(**{'X': X, 'Y': Y})
+    reg.register(callback)
+    plt.show()
+
+    plt.plot(X[:, 0], X[:, 1], 'ro')
+    plt.plot(Y[:, 0], Y[:, 1], 'bo')
+    plt.plot(reg.TY[:, 0], reg.TY[:, 1], 'b*')
 
 
 # =================================================================================================================
@@ -63,48 +145,6 @@ for d in list(res.keys()):
         segs.append([[x, x + w], [y, y + h]])
     all_segs.append(segs)
 all_segs = np.array(all_segs)
-
-# ===== Point Set Registration ====================================================================================
-
-t1 = 0
-t2 = 1
-
-plt.figure()
-plt.cla()
-ellipses = res[list(res.keys())[t1]]['pred']
-print(len(ellipses))
-plt.plot(ellipses['ell_x'], ellipses['ell_y'], 'ro')
-X = np.array(ellipses[['ell_x', 'ell_y']])
-
-ellipses = res[list(res.keys())[t2]]['pred']
-print(len(ellipses))
-plt.plot(ellipses['ell_x'], ellipses['ell_y'], 'bo')
-Y = np.array(ellipses[['ell_x', 'ell_y']])
-
-
-def visualize(iteration, error, X, Y, ax):
-    plt.cla()
-    ax.scatter(X[:, 0],  X[:, 1], color='red', label='Target')
-    ax.scatter(Y[:, 0],  Y[:, 1], color='blue', label='Source')
-    plt.text(0.87, 0.92, 'Iteration: {:d}\nQ: {:06.4f}'.format(
-        iteration, error), horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, fontsize='x-large')
-    ax.legend(loc='upper left', fontsize='x-large')
-    plt.draw()
-    plt.pause(0.1)
-
-fig = plt.figure()
-fig.add_axes([0, 0, 1, 1])
-callback = partial(visualize, ax=fig.axes[0])
-
-# reg = AffineRegistration(**{'X': X, 'Y': Y})
-reg = RigidRegistration(**{'X': X, 'Y': Y})
-# reg = DeformableRegistration(**{'X': X, 'Y': Y})
-reg.register(callback)
-plt.show()
-
-plt.plot(X[:, 0], X[:, 1], 'ro')
-plt.plot(Y[:, 0], Y[:, 1], 'bo')
-plt.plot(reg.TY[:, 0], reg.TY[:, 1], 'b*')
 
 # ==================================================================================================================
 

@@ -21,13 +21,16 @@ index = pd.read_csv('data/grapevine/image_index.csv')
 
 df = []
 for exp in index['exp'].unique():
+    # exp_path = PATH + exp + '/'
+    exp_path = PATH + 'cache_' + exp + '/'
     s = index[index['exp'] == exp]
-    if os.path.isdir(PATH + exp):
-        for plantid in os.listdir(PATH + exp):
+    if os.path.isdir(exp_path):
+        for plantid in os.listdir(exp_path):
             s2 = s[s['plantid'] == int(plantid)]
             genotype, scenario = s2[['genotype', 'scenario']].iloc[0]
-            for f in os.listdir(PATH + exp + '/' + plantid):
-                df_f = pd.read_csv(PATH + exp + '/' + plantid + '/' + f)
+            plantid_path = exp_path + plantid + '/'
+            for f in os.listdir(plantid_path):
+                df_f = pd.read_csv(plantid_path + f)
                 # TODO : info specific to plant = not in this df ? only in index ?
                 task, angle = [int(k) for k in f[:-4].split('_')]
                 timestamp = s2[(s2['taskid'] == task) & (s2['imgangle'] == angle)]['timestamp'].iloc[0]
@@ -38,6 +41,9 @@ df = pd.concat(df)
 
 df['area'] = (df['ell_w'] / 2) * (df['ell_h'] / 2) * np.pi
 df['roundness'] = df['ell_w'] / df['ell_h']  # always h > w
+df['black'] = df['black'].astype(int) * 100
+df['t'] = (df['timestamp'] - min(df['timestamp'])) / 3600 / 24  # TODO : for each exp
+
 
 df.to_csv(PATH + 'full_results.csv', index=False)
 
@@ -76,8 +82,6 @@ plantid = 7243
 selec = df[(df['exp'] == 'DYN2020-05-15') & (df['plantid'] == plantid)]
 selec = selec.sort_values('timestamp', ascending=False)
 selec = selec[~(selec['task'].isin([2377, 2379]))]
-selec['black'] = selec['black'].astype(int) * 100
-selec['t'] = (selec['timestamp'] - min(selec['timestamp'])) / 3600 / 24
 
 from pylab import *
 from scipy.optimize import curve_fit
@@ -107,10 +111,10 @@ plt.xlabel('berry area (px²)')
 plt.xlim((0, 8000))
 plt.hist(selec['area'], bins=500)
 
-# small vs large berry
+# small vs large berry, for each task separately
 selec['area_quantile'] = None
 selec.index = np.arange(len(selec))
-for task in np.unique(selec['task'])[::10]:
+for task in np.unique(selec['task']):
     s = selec[selec['task'] == task]
     n = 20  # how many subdivisions
     quantiles = np.quantile(s['area'], [k * (1 / n) for k in range(1, n)])
@@ -118,6 +122,20 @@ for task in np.unique(selec['task'])[::10]:
     for k in range(n):
         s2 = s[(quantiles[k] <= s['area']) & (s['area'] < quantiles[k + 1])]
         selec.at[s2.index, 'area_quantile'] = k
+
+#
+s = selec[selec['task'] == 2527]
+print(s.iloc[0]['t'])
+gb = s.groupby('area_quantile')[['area', 'black']].mean()
+hist = plt.hist(s['area'], 50)
+plt.ylim((0, max(hist[0])))
+for area in gb['area']:
+    plt.plot([area, area], [0, 2 * max(hist[0])], 'r-')
+plt.xlabel('berry area (px²)')
+plt.figure()
+plt.plot(gb['area'], gb['black'], 'k.-')
+plt.xlabel('Mean berry area in the quantile group (px²)')
+plt.ylabel('Proportion of black berries (%)')
 
 plt.subplot(3, 1, 1)
 var = 'area'
@@ -180,6 +198,29 @@ for angle in angles:
     s = gb[gb['angle'] == angle]
     plt.plot(s['timestamp'], s[0], label=angle)
 plt.legend()
+
+# ===== 2020; all plants ============================================================================================
+
+plt.figure()
+plt.ylabel('Mean berry area (px²)')
+
+for plantid in df['plantid'].unique():
+    selec = df[(df['exp'] == 'DYN2020-05-15') & (df['plantid'] == plantid)]
+    selec = selec.sort_values('timestamp', ascending=False)
+    selec = selec[selec['t'] > 2.3]  # remove first tasks
+
+    area0 = np.mean(selec[selec['t'] < 6])['area']
+    # selec['area'] /= area0
+
+    # 50% black timing
+    gb = selec.groupby('task')[['black', 't']].mean().reset_index().sort_values('t')
+    timing = gb[gb['black'] > 50].sort_values('t').iloc[0]['t']
+    timing = 0
+
+    var = 'roundness'
+    gb = selec.groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
+    plt.plot(gb['t'] - timing, gb[var], '-')
+
 
 # ===== GxE =========================================================================================================
 

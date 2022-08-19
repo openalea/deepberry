@@ -62,7 +62,7 @@ anot_files = os.listdir(PATH + 'annotation/')
 #plt.ylim((1635, 1703))
 
 df = []
-for file in anot_files[::15]:
+for file in anot_files[::12]:
 
     img = plt.imread(PATH + 'images/' + file.replace('.json', '.png'))
     plt.figure(file)
@@ -89,7 +89,7 @@ for file in anot_files[::15]:
         xmin, xmax, ymin, ymax = np.min(lsp_x), np.max(lsp_x), np.min(lsp_y), np.max(lsp_y)
         box_x, box_y, box_w, box_h = (xmax + xmin) / 2, (ymax + ymin) / 2, xmax - xmin, ymax - ymin
 
-        #plt.plot(list(x_anot) + [x_anot[0]], list(y_anot) + [y_anot[0]], 'ro-')
+        plt.plot(list(x_anot) + [x_anot[0]], list(y_anot) + [y_anot[0]], 'ro-')
         plt.plot(lsp_x, lsp_y, 'blue')
         #plt.plot([xmin, xmin, xmax, xmax, xmin], [ymin, ymax, ymax, ymin, ymin], 'b-')
 

@@ -1,3 +1,18 @@
+"""
+MULTI-PROCESSING
+
+a) DETECTION (cv2)
+- run_one_plant() : 90% cpu, 2.1s
+- run_one_plant(), cv2.setNumThreads(0) : 1 cpu, 10.6s
+- mp_full_exp() : MARCHE PAS
+- mp_full_exp(), cv2.setNumThreads(0) : tous les cpu, 11.9s / n_cpu
+
+b) SEGMENTATION (keras)
+- run_one_plant() : plusieurs cpu, 3s
+- mp_full_exp() : MARCHE PAS
+Apparemment il y a pas de moyen facile de retirer le multi-processing pour tensorflow/keras ...
+"""
+
 import os
 import pandas as pd
 import cv2
@@ -9,7 +24,7 @@ from multiprocessing import Pool
 from deepberry.src.openalea.deepberry.prediction import detect_berry, segment_berry_scaled, classify_berry, load_models_berry
 
 # disable multi CPU in opencv2. necessary to run deep-learning (opencv2) and multi-processing at the same time
-# cv2.setNumThreads(0)
+#cv2.setNumThreads(0)
 
 PATH_DATA = '/home/daviet/deepberry_data/'
 PATH_CACHE = '/mnt/data/phenoarch_cache/'
@@ -20,15 +35,19 @@ index = pd.read_csv(PATH_DATA + 'image_index.csv')
 
 df = index[~index['imgangle'].isna()]
 
-exp = 'DYN2020-05-15'
+exp = 'ARCH2022-05-18'
 cache_path = PATH_CACHE + 'cache_{}/'.format(exp)
 if not os.path.isdir(cache_path):
     os.mkdir(cache_path)
 
 exp_df = df[df['exp'] == exp]
 
+genotypes = list(exp_df.groupby(['genotype'])['plantid'].nunique().sort_values()[::-1].reset_index()['genotype'])
+
 
 def run_one_plant(plantid):
+
+    print('run_one_plant', plantid)
 
     s = exp_df[exp_df['plantid'] == plantid]
     s = s.sort_values('timestamp')
@@ -69,17 +88,20 @@ def run_one_plant(plantid):
 
 
 def mp_full_exp(plantids, nb_cpu=11):
-
     with Pool(nb_cpu) as p:
         p.map(run_one_plant, plantids)
 
 # ===============================================================================================================
 
-plantids = [int(p) for p in exp_df['plantid'].unique()]
-print(len(plantids))
-for plantid in plantids:
-    run_one_plant(plantid)
-#mp_full_exp(plantids, nb_cpu=5)
+
+for genotype in genotypes:
+    print('genotype', genotype)
+    s = exp_df[exp_df['genotype'] == genotype]
+    for plantid in [int(plantid) for plantid in s['plantid'].unique()]:
+        print('plantid', plantid)
+        run_one_plant(plantid)
+
+#mp_full_exp(plantids, nb_cpu=11)
 
 
 

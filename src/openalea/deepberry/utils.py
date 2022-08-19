@@ -56,7 +56,7 @@ def ellipse_interpolation(x, y, w, h, a, n_points=100):
     for i in range(ell.shape[1]):
         rot[:, i] = np.dot(r_rot, ell[:, i])
     points_x, points_y = x + rot[0, :], y + rot[1, :]
-    return points_x, points_y
+    return np.array([points_x, points_y])
 
 # ===== bounding box stuff ===========================================================================================
 

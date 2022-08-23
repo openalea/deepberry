@@ -54,7 +54,7 @@ for plantid in df['plantid'].unique():
         else:
             df.at[s.index, 'imgangle'] = [k * 30 for k in range(12)]
 
-df['grapeid'] = None
+df['grapeid'] = 0
 
 df20 = df.copy()
 
@@ -124,7 +124,7 @@ for plantid in df['plantid'].unique():
         else:
             df.at[s.index, 'imgangle'] = [k * 30 for k in range(12)]
 
-df['grapeid'] = None
+df['grapeid'] = 0
 
 df22 = df.copy()
 
@@ -165,6 +165,15 @@ for i, (_, row) in enumerate(selec.iterrows()):
     path1 = 'V:/{}/{}/{}.png'.format(row['exp'], row['taskid'], row['imgguid'])
     path2 = 'data/grapevine/grapevine22/{}.png'.format(row['acquisitiondate']).replace(':', '-')
     shutil.copyfile(path1, path2)
+
+# TODO remove
+for k, f in enumerate(os.listdir('data/grapevine/gif/')):
+    img = cv2.cvtColor(cv2.imread('data/grapevine/gif/' + f), cv2.COLOR_BGR2RGB)
+    f2 = f[:10] + f[10:-4].replace('-', ':')
+    task = selec[selec['acquisitiondate'] == f2]['taskid'].iloc[0]
+    img = cv2.putText(img, str(task), (200, 900), cv2.FONT_HERSHEY_SIMPLEX, 6, (255, 0, 0), 20, cv2.LINE_AA)
+    plt.imsave('data/grapevine/gif3/{}_{}.png'.format(k, task), img)
+
 
 # ==== create gif =======================================================================================
 # full gif script for angle

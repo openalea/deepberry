@@ -21,55 +21,61 @@ df = index[~index['imgangle'].isna()]
 # #genotypes = ['BARESA', 'BASERRI', 'BELLONE', 'PRIMITIV', 'A02-PL6']
 # selec = df2[df2['g2'].isin(genotypes)]
 
-manip = 'DYN2020-05-15'
-if not os.path.isdir(PATH + manip):
-    os.mkdir(PATH + manip)
+exp = 'ARCH2021-05-27'
+if not os.path.isdir(PATH + exp):
+    os.mkdir(PATH + exp)
 
 # TODO typo exp vs manip
-selec = df[df['exp'] == manip]
+selec = df[df['exp'] == exp]
 
 for plantid in [int(p) for p in selec['plantid'].unique()]:
+    s0 = selec[selec['plantid'] == plantid]
 
-    s = selec[selec['plantid'] == plantid]
+    for grapeid in s0['grapeid'].unique():
+        s = s0[s0['grapeid'] == grapeid]
 
-    s = s.sort_values('timestamp')
+        s = s.sort_values('timestamp')
 
-    plantid_path = PATH + '{}/{}/'.format(manip, plantid)
-    if not os.path.isdir(plantid_path):
-        os.mkdir(plantid_path)
+        if len(s0['grapeid'].unique()) == 1:
+            plantid_path = PATH + '{}/{}/'.format(exp, plantid)
+        else:
+            plantid_path = PATH + '{}/{}_{}/'.format(exp, plantid, int(grapeid))
+        if not os.path.isdir(plantid_path):
+            os.mkdir(plantid_path)
 
-    for _, row in s.iterrows():
+        for _, row in s.iterrows():
 
-        n_files = sum([len(os.listdir(PATH + manip + '/' + id)) for id in os.listdir(PATH + manip)])
-        print(manip, n_files)
+            n_files = sum([len(os.listdir(PATH + exp + '/' + id)) for id in os.listdir(PATH + exp)])
+            print(exp, n_files)
 
-        savefile = plantid_path + '{}_{}.csv'.format(int(row['taskid']), int(row['imgangle']))
-        img_path = 'V:/{}/{}/{}.png'.format(row['exp'], int(row['taskid']), row['imgguid'])
+            savefile = plantid_path + '{}_{}.csv'.format(int(row['taskid']), int(row['imgangle']))
 
-        if not os.path.isfile(savefile):
+            img_path = 'V:/{}/{}/{}.png'.format(row['exp'], int(row['taskid']), row['imgguid'])
 
-            img_dwn = False
-            try:
-                img = cv2.imread(img_path)
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                img_dwn = True
-            except:
-                print('bug', img_path)
+            if not os.path.isfile(savefile):
 
-            if img_dwn:
+                img_dwn = False
+                try:
+                    img = cv2.imread(img_path)
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    img_dwn = True
+                except:
+                    print('bug', img_path)
 
-                t0 = time.time()
-                res_det = detect_berry(image=img, model=MODEL_DET)
-                t1 = time.time()
-                res_seg, _ = segment_berry_scaled(image=img, model=MODEL_SEG, boxes=res_det)
-                t2 = time.time()
-                res_classif = classify_berry(image=img, ellipses=res_seg)
-                t3 = time.time()
+                if img_dwn:
 
-                print('det: {:.1f}s, seg: {:.1f}s, classif: {:.1f}s (n={}, black={}%)'.format(
-                    t1 - t0, t2 - t1, t3 - t2, len(res_classif), round(100*np.sum(res_classif['black'])/len(res_classif), 1)))
+                    t0 = time.time()
+                    res_det = detect_berry(image=img, model=MODEL_DET)
+                    t1 = time.time()
+                    res_seg, _ = segment_berry_scaled(image=img, model=MODEL_SEG, boxes=res_det)
+                    t2 = time.time()
+                    res_classif = classify_berry(image=img, ellipses=res_seg)
+                    t3 = time.time()
 
-                res_classif.to_csv(savefile, index=False)
+                    print('det: {:.1f}s, seg: {:.1f}s, classif: {:.1f}s (n={}, black={}%)'.format(
+                        t1 - t0, t2 - t1, t3 - t2, len(res_classif), round(100*np.sum(res_classif['black'])/len(res_classif), 1)))
+
+                    res_classif.to_csv(savefile, index=False)
 
 
 

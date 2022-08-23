@@ -35,7 +35,7 @@ index = pd.read_csv(PATH_DATA + 'image_index.csv')
 
 df = index[~index['imgangle'].isna()]
 
-exp = 'ARCH2022-05-18'
+exp = 'ARCH2021-05-27'
 cache_path = PATH_CACHE + 'cache_{}/'.format(exp)
 if not os.path.isdir(cache_path):
     os.mkdir(cache_path)
@@ -49,42 +49,49 @@ def run_one_plant(plantid):
 
     print('run_one_plant', plantid)
 
-    s = exp_df[exp_df['plantid'] == plantid]
-    s = s.sort_values('timestamp')
+    s0 = exp_df[exp_df['plantid'] == plantid]
 
-    plantid_path = cache_path + str(plantid) + '/'
-    if not os.path.isdir(plantid_path):
-        os.mkdir(plantid_path)
+    for grapeid in s0['grapeid'].unique():
 
-    for _, row in s.iterrows():
+        s = s0[s0['grapeid'] == grapeid]
+        s = s.sort_values('timestamp')
 
-        savefile = plantid_path + '{}_{}.csv'.format(int(row['taskid']), int(row['imgangle']))
-        img_path = '/mnt/phenomixNas/{}/{}/{}.png'.format(row['exp'], int(row['taskid']), row['imgguid'])
+        if len(s0['grapeid'].unique()) == 1:
+            plantid_path = cache_path + '{}/'.format(plantid)
+        else:
+            plantid_path = cache_path + '{}_{}/'.format(plantid, int(grapeid))
+        if not os.path.isdir(plantid_path):
+            os.mkdir(plantid_path)
 
-        if not os.path.isfile(savefile):
+        for _, row in s.iterrows():
 
-            img_dwn = False
-            try:
-                img = cv2.imread(img_path)
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                img_dwn = True
-            except:
-                print('bug', img_path)
+            savefile = plantid_path + '{}_{}.csv'.format(int(row['taskid']), int(row['imgangle']))
+            img_path = '/mnt/phenomixNas/{}/{}/{}.png'.format(row['exp'], int(row['taskid']), row['imgguid'])
 
-            if img_dwn:
+            if not os.path.isfile(savefile):
 
-                t0 = time.time()
-                res_det = detect_berry(image=img, model=MODEL_DET)
-                t1 = time.time()
-                res_seg, _ = segment_berry_scaled(image=img, model=MODEL_SEG, boxes=res_det)
-                t2 = time.time()
-                res_classif = classify_berry(image=img, ellipses=res_seg)
-                t3 = time.time()
+                img_dwn = False
+                try:
+                    img = cv2.imread(img_path)
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    img_dwn = True
+                except:
+                    print('bug', img_path)
 
-                print('{} | det: {:.1f}s, seg: {:.1f}s, classif: {:.1f}s (n={}, black={}%)'.format(plantid,
-                    t1 - t0, t2 - t1, t3 - t2, len(res_classif), round(100*np.sum(res_classif['black'])/len(res_classif), 1)))
+                if img_dwn:
 
-                res_classif.to_csv(savefile, index=False)
+                    t0 = time.time()
+                    res_det = detect_berry(image=img, model=MODEL_DET)
+                    t1 = time.time()
+                    res_seg, _ = segment_berry_scaled(image=img, model=MODEL_SEG, boxes=res_det)
+                    t2 = time.time()
+                    res_classif = classify_berry(image=img, ellipses=res_seg)
+                    t3 = time.time()
+
+                    print('{} | det: {:.1f}s, seg: {:.1f}s, classif: {:.1f}s (n={}, black={}%)'.format(plantid,
+                        t1 - t0, t2 - t1, t3 - t2, len(res_classif), round(100*np.sum(res_classif['black'])/len(res_classif), 1)))
+
+                    res_classif.to_csv(savefile, index=False)
 
 
 def mp_full_exp(plantids, nb_cpu=11):

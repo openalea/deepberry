@@ -22,7 +22,8 @@ index = pd.read_csv('data/grapevine/image_index.csv')
 df = []
 for exp in index['exp'].unique():
     # exp_path = PATH + exp + '/'
-    exp_path = PATH + 'cache_' + exp + '/'
+    # exp_path = PATH + 'cache_' + exp + '/'
+    exp_path = 'X:/phenoarch_cache/cache_{}/'.format(exp)
     s = index[index['exp'] == exp]
     if os.path.isdir(exp_path):
         for plantid in os.listdir(exp_path):
@@ -30,6 +31,7 @@ for exp in index['exp'].unique():
             genotype, scenario = s2[['genotype', 'scenario']].iloc[0]
             plantid_path = exp_path + plantid + '/'
             for f in os.listdir(plantid_path):
+                print(plantid_path + f)
                 df_f = pd.read_csv(plantid_path + f)
                 # TODO : info specific to plant = not in this df ? only in index ?
                 task, angle = [int(k) for k in f[:-4].split('_')]
@@ -42,8 +44,9 @@ df = pd.concat(df)
 df['area'] = (df['ell_w'] / 2) * (df['ell_h'] / 2) * np.pi
 df['roundness'] = df['ell_w'] / df['ell_h']  # always h > w
 df['black'] = df['black'].astype(int) * 100
-df['t'] = (df['timestamp'] - min(df['timestamp'])) / 3600 / 24  # TODO : for each exp
 
+tmin_dic = {row['exp']: row['timestamp'] for _, row in df.groupby('exp')['timestamp'].min().reset_index().iterrows()}
+df['t'] = df.apply(lambda row: (row['timestamp'] - tmin_dic[row['exp']]) / 3600 / 24, axis=1)
 
 df.to_csv(PATH + 'full_results.csv', index=False)
 
@@ -201,25 +204,41 @@ plt.legend()
 
 # ===== 2020; all plants ============================================================================================
 
+selec = df[df['exp'] == 'DYN2020-05-15']
+
 plt.figure()
-plt.ylabel('Mean berry area (px²)')
+#plt.ylabel('Mean berry area (px²)')
+#plt.ylabel('Mean berry roundness')
+plt.ylabel('Proportion of black berries (%)')
+plt.xlabel('Time (days)')
 
-for plantid in df['plantid'].unique():
-    selec = df[(df['exp'] == 'DYN2020-05-15') & (df['plantid'] == plantid)]
-    selec = selec.sort_values('timestamp', ascending=False)
-    selec = selec[selec['t'] > 2.3]  # remove first tasks
+for plantid in selec['plantid'].unique():
+    s = df[df['plantid'] == plantid]
+    s = s.sort_values('timestamp', ascending=False)
+    s = s[s['t'] > 2.3]  # remove first tasks
 
-    area0 = np.mean(selec[selec['t'] < 6])['area']
-    # selec['area'] /= area0
+    s = s[s['area'] > 1400]
+
+    area0 = np.mean(s[s['t'] < 6])['area']
+    #selec['area'] /= area0
 
     # 50% black timing
-    gb = selec.groupby('task')[['black', 't']].mean().reset_index().sort_values('t')
+    gb = s.groupby('task')[['black', 't']].mean().reset_index().sort_values('t')
     timing = gb[gb['black'] > 50].sort_values('t').iloc[0]['t']
     timing = 0
 
-    var = 'roundness'
-    gb = selec.groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
+    var = 'area'
+    gb = s.groupby('task')[[var, 't']].mean().reset_index().sort_values('t')
     plt.plot(gb['t'] - timing, gb[var], '-')
+
+# histograms
+threshold = 1400
+for k, plantid in enumerate(selec['plantid'].unique()):
+    plt.subplot(3, 3, k + 1)
+    s = selec[selec['plantid'] == plantid]
+    hist = plt.hist(s['area'], 500)
+    plt.xlim((0, 9000))
+    plt.plot([threshold] * 2, [0, np.max(hist[0])], 'r-')
 
 
 # ===== GxE =========================================================================================================

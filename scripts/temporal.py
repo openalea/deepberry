@@ -4,7 +4,9 @@ import shutil
 import matplotlib.pyplot as plt
 import cv2
 from scipy.optimize import minimize, basinhopping
+from scipy.spatial.distance import directed_hausdorff
 import os
+
 
 from deepberry.src.openalea.deepberry.prediction import ellipse_interpolation
 
@@ -35,59 +37,130 @@ PATH = 'data/grapevine/results/'
 #plant_index = pd.read_csv(PATH + 'image_index_old.csv')
 
 df = pd.read_csv(PATH + 'full_results.csv')
+index = pd.read_csv('data/grapevine/image_index.csv')
 
-plantid = 7236
-selec = df[df['plantid'] == plantid]
+# plantid, angle = 7236, 120
+plantid, angle = 7243, 120
+exp = 'DYN2020-05-15'
 
-# angle with most berries
-angle = selec.groupby('angle').size().sort_values().reset_index()['angle'].iloc[-1]
-selec = selec[selec['angle'] == angle]
+selec = df[(df['exp'] == exp) & (df['plantid'] == plantid) & (df['angle'] == angle)]
 
-tasks = list(selec.groupby('task')['timestamp'].mean().reset_index().sort_values('timestamp')['task'])
-for i in range(len(tasks) - 1):
+# for loading images
+selec_index = index[(index['exp'] == exp) & (index['plantid'] == plantid) & (index['imgangle'] == angle)]
 
-    # i = 140
-    i = 139
+# # load images
+# for k, (_, row) in enumerate(selec_index.sort_values('timestamp').iterrows()):
+#     path1 = 'V:/{}/{}/{}.png'.format(exp, row['taskid'], row['imgguid'])
+#     path2 = 'data/grapevine/temporal/time-series/{}_{}.png'.format(k, row['taskid'])
+#     img = cv2.cvtColor(cv2.imread(path1), cv2.COLOR_BGR2RGB)
+#     ellipses = selec[selec['task'] == row['taskid']]
+#     for _, ell in ellipses.iterrows():
+#         x, y, w, h, a = ell[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
+#         lsp_x, lsp_y = ellipse_interpolation(x=x, y=y, w=w, h=h, a=a, n_points=100)
+#         img = cv2.polylines(img, [np.array([lsp_x, lsp_y]).T.astype('int32')], True, (255, 0, 0), 5)
+#     plt.imsave(path2, img)
 
-    s1 = selec[selec['task'] == tasks[i]]
-    s2 = selec[selec['task'] == tasks[i + 1]]
+all_d = []
 
-    plt.figure()
-    plt.gca().set_aspect('equal', adjustable='box')
-    for s, color in zip([s1, s2], ['r', 'b']):
-        for _, ell in s.iterrows():
-            x, y, w, h, a = ell[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
-            lsp_x, lsp_y = ellipse_interpolation(x=x, y=y, w=w, h=h, a=a, n_points=20)
-            plt.plot(lsp_x, lsp_y, color + '-')
+selec = selec[~selec['task'].isin([2377, 2379, 2494, 2554])]
 
-    ellipses1 = [ellipse_interpolation(e['ell_x'], e['ell_y'], e['ell_w'], e['ell_h'], e['ell_a'], n_points=20)
-     for _, e in s1.iterrows()]
-    ellipses2 = [ellipse_interpolation(e['ell_x'], e['ell_y'], e['ell_w'], e['ell_h'], e['ell_a'], n_points=20)
-                 for _, e in s2.iterrows()]
+selec['berry_id'] = -1
 
-    ell1 = ellipses1[0]
-    ell2 = ellipses2[5]
-    plt.plot(ell1[0], ell1[1], 'b-')
-    plt.plot(ell2[0], ell2[1], 'r-')
-    d = IOU(ell1.T, ell2.T)
+# pb 2380, 2382, 2384, 2385
+selec = selec[~selec['task'].isin([2380, 2382, 2384])]
 
-    # distance matrix
-    D = np.zeros((len(ellipses1), len(ellipses2)))
-    for i, ell1 in enumerate(ellipses1):
-        for j, ell2 in enumerate(ellipses2):
-            d = IOU(ell1.T, ell2.T)
-            d2 = ell1[['ell_x', 'ell_y']] - ell2[['ell_x', 'ell_y']]
-            d = d if d != 0 else
-            D[i, j] = d
+# 2520 -> 2527 legere rotation, donc des baies disparaissent (raparaissent 3-4 frames plus tard)
+
+
+tasks = list(selec.groupby('task')['timestamp'].mean().sort_values().reset_index()['task'])
+# tasks = tasks[7:40]
+
+for i_task, task in enumerate(tasks[:-1]):
+
+    i = 56
+    i_task, task = i, tasks[i]
+
+    s1 = selec[selec['task'] == tasks[i_task]]
+    s2 = selec[selec['task'] == tasks[i_task + 1]]
+
+    centers1, centers2 = np.array(s1[['ell_x', 'ell_y']]), np.array(s2[['ell_x', 'ell_y']])
+
+    # point set registration
+    reg = AffineRegistration(**{'X': centers1, 'Y': centers2})
+    centers2_reg = reg.register()[0]
+
+    # DISTANCE MATRIX
+    # a) euclidian distance between centers
+    mats, dists = [], []
+    for c2 in [centers2, centers2_reg]:
+        D = np.zeros((len(s1), len(s2)))
+        for i, c1 in enumerate(centers1):
+            D[i] = np.sqrt(np.sum((c1 - c2) ** 2, axis=1))
+        mats.append(D)
+        dists.append(np.median(np.min(D, axis=0)))
+    D = mats[np.argmin(dists)]  # chose matrix with lowest score
+
+    # b) if needed, more accurate distance measurement
+    # threshold = 200
+    # h_d = max(directed_hausdorff(ell1.T, ell2.T)[0], directed_hausdorff(ell2.T, ell1.T)[0])
+    # D[i, j] = h_d
 
     # pairwise matches
-    seg_pairs = []
-    for k in range(5):
+    matches = []
+    dists = []
+    # h_dists = []
+    for k in range(min(D.shape)):
         i_min, j_min = np.unravel_index(D.argmin(), D.shape)
-        seg_pairs.append([segs1[i_min], segs2[j_min]])
+        matches.append([i_min, j_min])
+        dists.append(D[i_min, j_min])
         D[i_min, :] = float('inf')
         D[:, j_min] = float('inf')
-    seg_pairs = np.array(seg_pairs)
+    matches = np.array(matches)
+
+    # save matches (tracking)
+    if i_task == 0:
+        s1['berry_id'] = np.arange(len(s1))
+        selec.at[s1.index, 'berry_id'] = s1['berry_id']
+    threshold = 30
+    new_indexes = np.zeros(len(s2)) - 1
+    for (i, j), d in zip(matches, dists):
+        if d < threshold:
+            new_indexes[j] = s1.iloc[i]['berry_id']
+    selec.at[s2.index, 'berry_id'] = new_indexes
+
+    name = '{}) {} vs {}'.format(i_task, tasks[i_task], tasks[i_task + 1])
+    print(name, round(np.median(dists), 1))
+    all_d.append(np.median(dists))
+
+    # plot
+    ellipses1 = [ellipse_interpolation(e['ell_x'], e['ell_y'], e['ell_w'], e['ell_h'], e['ell_a'], n_points=100)
+     for _, e in s1.iterrows()]
+    ellipses2 = [ellipse_interpolation(e['ell_x'], e['ell_y'], e['ell_w'], e['ell_h'], e['ell_a'], n_points=100)
+                 for _, e in s2.iterrows()]
+    plt.figure(name)
+    plt.gca().set_aspect('equal', adjustable='box')
+    # dists = []
+    for i, j in matches:
+        ell1 = ellipses1[i]
+        ell2 = ellipses2[j]
+        plt.plot(ell1[0], 2448 - ell1[1], 'b-', linewidth=0.8)
+        plt.plot(ell2[0], 2448 - ell2[1], 'r-', linewidth=0.8)
+        (x1, y1), (x2, y2) = s1.iloc[i][['ell_x', 'ell_y']], s2.iloc[j][['ell_x', 'ell_y']]
+        plt.plot([x1, x2], [2448 - y1, 2448 - y2], 'k-')
+        dists.append(np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2))
+
+gb = selec.groupby('task')['berry_id'].nunique()
+gb = gb[tasks]  # correct order
+plt.plot(np.arange(len(gb)), gb, 'k.-')
+
+plt.figure()
+ids = list(selec.groupby('berry_id').size().sort_values(ascending=False).reset_index()['berry_id'][1:30])
+for id in ids:
+#for id in np.unique([id for id in selec['berry_id'] if id != -1])[::5]:
+    s = selec[selec['berry_id'] == id].sort_values('t')
+    plt.plot(s['t'], s['area'], '.-')
+
+    # =======================================================================================================
 
     # ===== Point Set Registration ======
 

@@ -175,45 +175,19 @@ def segment_berry_scaled(image, model, boxes, seg_size=128):
     return res, res_ellipse
 
 
-def berry_is_black(image, ell_parameters):
-    """
-    ell_parameters = [x, y, w, h, a] = parameters of an ellipse located on the image
-    """
-    x, y, w, h, a = ell_parameters
+def mean_hue_berry(image, ellipses):
 
-    mask = cv2.ellipse(np.float32(image[:, :, 0] * 0), (round(x), round(y)), (round(w / 2), round(h / 2)),
-                       a, 0., 360, (1), -1)
-
-    pixels = image[mask == 1]  # r, g, b
-    pixels_hsv = cv2.cvtColor(np.array([pixels]), cv2.COLOR_RGB2HSV)[0]
-
-    green = np.median(pixels, axis=0)[1]
-    hue = np.median(pixels_hsv, axis=0)[0]
-
-    if green < 35:
-        return True
-    elif green > 80:
-        return False
-    else:
-        if hue > 80:
-            return True
-        elif hue > 41:
-            return False
-        else:
-            # /!\ green in [35, 80] and hue in [0, 41] is ambiguous!
-            if hue > 25:
-                return False
-            else:
-                return True
-
-
-def classify_berry(image, ellipses):
-    is_black_list = []
+    hues = []
     res = ellipses.copy()
     for _, row in ellipses.iterrows():
-        black = berry_is_black(image=image, ell_parameters=list(row[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]))
-        is_black_list.append(black)
-    res['black'] = is_black_list
+        x, y, w, h, a = list(row[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']])
+        mask = cv2.ellipse(np.float32(image[:, :, 0] * 0), (round(x), round(y)), (round(w / 2), round(h / 2)),
+                           a, 0., 360, (1), -1)
+        pixels = image[mask == 1]  # r, g, b
+        pixels_hsv = cv2.cvtColor(np.array([pixels]), cv2.COLOR_RGB2HSV)[0]
+        hue = np.mean(pixels_hsv, axis=0)[0]
+        hues.append(hue)
+    res['hue'] = hues
     return res
 
 

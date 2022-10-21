@@ -30,7 +30,7 @@ def date_to_timestamp(date):
     return int(time.mktime(datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S').timetuple()))
 
 
-# ===== 2020 experiment =====
+# ===== PhenoArch 2020 experiment ===================================================================================
 
 df = pd.read_csv('data/copy_from_database/images_grapevine20.csv')
 df_plant = pd.read_csv('data/copy_from_database/plants_grapevine20.csv')
@@ -58,10 +58,25 @@ df['grapeid'] = 0
 
 df20 = df.copy()
 
-# ===== 2021 experiment =====
+# ===== PhenoArch 2021 experiment ===================================================================================
 
 df = pd.read_csv('data/copy_from_database/images_grapevine21.csv')
 df_plant = pd.read_csv('data/copy_from_database/plants_grapevine21.csv')
+
+# TODO remove
+# plantid = np.random.choice(df['plantid'].unique())
+plantid = 7788
+selec = df[df['plantid'] == plantid]
+# task = np.random.choice(selec['taskid'].unique())
+task = 3741
+s = selec[selec['taskid'] == task]
+print(len(s))
+s = s.sort_values('acquisitiondate')
+for k, (_, row) in enumerate(s.iloc[:15].iterrows()):
+    path = 'Z:/{}/{}/{}.png'.format('ARCH2021-05-27', row['taskid'], row['imgguid'])
+    img = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
+    plt.figure(k)
+    plt.imshow(img)
 
 df = df[df['viewtypeid'] == 3]  # xyz camera
 df['exp'] = 'ARCH2021-05-27'
@@ -78,13 +93,14 @@ df['scenario'] = ['odium' if 'Odium' in p else 'normal' for p in df['plantcode']
 for plantid in df['plantid'].unique():
     selec = df[df['plantid'] == plantid]
     gb = selec.groupby('taskid').size()
-    n_imgs = max(set(gb.values), key=list(gb.values).count)
+    n_imgs = max(set(gb.values), key=list(gb.values).count)  # most frequent number of images / task
     if n_imgs % 12 != 0:  # True for only 1 plant
         df.at[selec.index, 'imgangle'] = None
         df.at[selec.index, 'grapeid'] = None
     else:
         for task in selec['taskid'].unique():
             s = selec[selec['taskid'] == task].sort_values('acquisitiondate')
+
             if len(s) != n_imgs:
                 df.at[s.index, 'imgangle'] = None
                 df.at[s.index, 'grapeid'] = None
@@ -94,7 +110,7 @@ for plantid in df['plantid'].unique():
 
 df21 = df.copy()
 
-# ===== 2022 experiment =====
+# ===== PhenoArch 2022 experiment ===================================================================================
 
 df = pd.read_csv('data/copy_from_database/images_grapevine22.csv')
 df_plant = pd.read_csv('data/copy_from_database/plants_grapevine22.csv')
@@ -128,7 +144,7 @@ df['grapeid'] = 0
 
 df22 = df.copy()
 
-# ===== all =====
+# ===== Combine 2020/2021/2022 PhenoArch experiments =================================================================
 
 df = pd.concat((df20, df21, df22))
 
@@ -138,27 +154,26 @@ df['timestamp'] = df.apply(lambda row: date_to_timestamp(row['acquisitiondate'])
 df.to_csv('data/grapevine/image_index.csv', index=False)
 
 # ====================================================================================================================
+# ====================================================================================================================
 
-df = pd.read_csv('data/grapevine/image_index.csv')
+index = pd.read_csv('data/grapevine/image_index.csv')
 
-# ===== extract images (training set) ================================================================================
+# ===== verify image_index coherency ===============================================================================
 
-# files = [f for f in os.listdir('data/grapevine/dataset/images') if 'ARCH2022' in f] + os.listdir(
-#     'data/grapevine/dataset/images/TODO')
-# plantids_2022 = np.unique([int(f.split('_')[1]) for f in files])
-selec = df[(df['exp'] == 'ARCH2022-05-18') & (~df['imgangle'].isna())]
-selec = selec[selec['taskid'] > 6070]
-selec = selec[selec['plantid'].isin(selec[selec['plantcode'].isin([p for p in selec['plantcode'] if 'WD2' in p])]['plantid'])]  # WD2
-# selec = selec[~selec['plantid'].isin(plantids_2022)]
-folder = 'data/grapevine/grapevine22/'
-for _, row in selec.sample(300).iterrows():
-    path1 = 'V:/ARCH2022-05-18/{}/{}.png'.format(row['taskid'], row['imgguid'])
-    path2 = folder + 'ARCH2022-05-18_{}_{}_{}.png'.format(int(row.plantid), int(row.taskid), int(row.imgangle))
-    shutil.copyfile(path1, path2)
+selec = index[index['exp'] == 'ARCH2021-05-27']
+
+gb = selec.groupby(['plantid', 'grapeid', 'taskid']).size().reset_index()
+plantid, grapeid, task = gb.sample().iloc[0][['plantid', 'grapeid', 'taskid']]
+s = selec[(selec['plantid'] == plantid) & (selec['grapeid'] == grapeid) & (selec['taskid'] == task)]
+for _, row in s.iterrows():
+    path = 'Z:/{}/{}/{}.png'.format(row['exp'], row['taskid'], row['imgguid'])
+    img = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
+    plt.figure(row['imgangle'])
+    plt.imshow(img)
 
 # ===== extract images =============================================================================================
 
-selec = df[(df['exp'] == 'DYN2020-05-15') & (df['plantid'] == 7243)]
+selec = index[(index['exp'] == 'DYN2020-05-15') & (index['plantid'] == 7243)]
 selec = selec[selec['imgangle'] == 120]
 
 for i, (_, row) in enumerate(selec.iterrows()):
@@ -166,62 +181,11 @@ for i, (_, row) in enumerate(selec.iterrows()):
     path2 = 'data/grapevine/grapevine22/{}.png'.format(row['acquisitiondate']).replace(':', '-')
     shutil.copyfile(path1, path2)
 
-# TODO remove
-for k, f in enumerate(os.listdir('data/grapevine/gif/')):
-    img = cv2.cvtColor(cv2.imread('data/grapevine/gif/' + f), cv2.COLOR_BGR2RGB)
-    f2 = f[:10] + f[10:-4].replace('-', ':')
-    task = selec[selec['acquisitiondate'] == f2]['taskid'].iloc[0]
-    img = cv2.putText(img, str(task), (200, 900), cv2.FONT_HERSHEY_SIMPLEX, 6, (255, 0, 0), 20, cv2.LINE_AA)
-    plt.imsave('data/grapevine/gif3/{}_{}.png'.format(k, task), img)
-
-
-# ==== create gif =======================================================================================
-# full gif script for angle
-
-plantid = 7243
-exp = 'DYN2020-05-15'
-task = 2505
-
-df_img = pd.read_csv('data/grapevine/image_index.csv')
-s_img = df_img[(df_img['exp'] == exp) & (df_img['plantid'] == plantid) & (df_img['taskid'] == task)]
-
-df_ell = pd.read_csv('data/grapevine/results/full_results.csv')
-s_ell = df_ell[(df_ell['exp'] == exp) & (df_ell['plantid'] == plantid) & (df_ell['task'] == task)]
-
-imgs_gif = []
-for _, row in s_img.iterrows():
-
-    path1 = 'V:/{}/{}/{}.png'.format(row['exp'], int(row['taskid']), row['imgguid'])
-    img = cv2.cvtColor(cv2.imread(path1), cv2.COLOR_BGR2RGB)
-
-    ellipses = s_ell[s_ell['timestamp'] == row['timestamp']]
-
-    for _, ell in ellipses.iterrows():
-        x, y, w, h, a = ell[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
-        lsp_x, lsp_y = ellipse_interpolation(x=x, y=y, w=w, h=h, a=a, n_points=100)
-        img = cv2.polylines(img, [np.array([lsp_x, lsp_y]).T.astype('int32')], True, (255, 0, 0), 5)
-
-    img[:150] *= 0
-    txt = 'camera angle = {}'.format(int(row['imgangle']))
-    img = cv2.putText(img, txt, (300, 120), cv2.FONT_HERSHEY_SIMPLEX, 4, (255, 255, 255), 5, cv2.LINE_AA)
-
-    path2 = 'data/grapevine/gif2/{}.png'.format(int(row['imgangle']))
-    plt.imsave(path2, img)
-
-    imgs_gif.append(img)
-
-imgs_gif = [Image.fromarray(np.uint8(img)) for img in imgs_gif]
-fps = 2
-imgs_gif[0].save('data/grapevine/2020_7243_task2505_{}fps.gif'.format(fps), save_all=True, append_images=imgs_gif[1:],
-                 optimize=True, duration=1000/fps, loop=0)
-
-
-
 # ===== image frequency / exp ======================================================================================
 
 i = 0
-for col, exp in zip(['g', 'r', 'k'], df['exp'].unique()):
-    selec = df[df['exp'] == exp]
+for col, exp in zip(['g', 'r', 'k'], index['exp'].unique()):
+    selec = index[index['exp'] == exp]
     plantids = selec['plantid'].unique()
     plantids = sorted(np.random.choice(plantids, int(len(plantids) / 10), replace=False)) if '2022' in exp else plantids
     for plantid in plantids:
@@ -230,22 +194,3 @@ for col, exp in zip(['g', 'r', 'k'], df['exp'].unique()):
         plt.plot(gb.values - min(selec['timestamp']), [i] * len(gb), col+'.-')
         i += 1
 
-# ===== load images (temporal) ==================================================================================
-
-selec = df[(df['exp'] == 'ARCH2021-05-27') & (~df['imgangle'].isna())]
-
-selec = selec[selec['grapeid'] == 0]
-
-# selec.groupby('plantid')[['taskid', 'daydate']].nunique()
-
-plantid = 1029
-angle = 150
-
-selec = selec[(selec['plantid'] == plantid) & (selec['imgangle'] == angle)]
-selec = selec.sort_values('timestamp')
-
-for i, (_, row) in enumerate(selec.iterrows()):
-
-    path1 = 'V:/{}/{}/{}.png'.format(row['exp'], row['taskid'], row['imgguid'])
-    path2 = 'data/grapevine/grapevine22/{}_{}_{}.png'.format(row['exp'], int(row.plantid), i)
-    shutil.copyfile(path1, path2)

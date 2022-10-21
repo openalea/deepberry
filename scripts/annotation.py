@@ -51,6 +51,15 @@ new_valid = ['DYN2020-05-15_7244_2636_330.png',
              'ARCH2022-05-18_1611_5924_0.png',
              'ARCH2022-05-18_1634_5924_30.png']
 
+# ===== powerpoint =================================================================================================
+
+img = plt.imread('data/grapevine/dataset/training_dataset/train/img57.png')
+label = np.loadtxt('data/grapevine/dataset/training_dataset/train/img57.txt')
+plt.imshow(img)
+for _, x, y, w, h in label:
+    x, y, w, h = 416 * x, 416 * y, 416 * w, 416 * h
+    plt.plot([x - w/2, x - w/2, x + w/2, x + w/2, x - w/2], [y + h/2, y - h/2, y - h/2, y + h/2, y + h/2], 'r-')
+
 # ===== annotation dataframe (and visualisation) ===================================================================
 
 
@@ -89,9 +98,9 @@ for file in anot_files[::12]:
         xmin, xmax, ymin, ymax = np.min(lsp_x), np.max(lsp_x), np.min(lsp_y), np.max(lsp_y)
         box_x, box_y, box_w, box_h = (xmax + xmin) / 2, (ymax + ymin) / 2, xmax - xmin, ymax - ymin
 
-        plt.plot(list(x_anot) + [x_anot[0]], list(y_anot) + [y_anot[0]], 'ro-')
-        plt.plot(lsp_x, lsp_y, 'blue')
-        #plt.plot([xmin, xmin, xmax, xmax, xmin], [ymin, ymax, ymax, ymin, ymin], 'b-')
+        # plt.plot(list(x_anot) + [x_anot[0]], list(y_anot) + [y_anot[0]], 'ro-')
+        # plt.plot(lsp_x, lsp_y, 'red')
+        plt.plot([xmin, xmin, xmax, xmax, xmin], [ymin, ymax, ymax, ymin, ymin], 'r-')
 
         df.append([ell_x, ell_y, ell_w, ell_h, ell_a, box_x, box_y, box_w, box_h, file.replace('.json', '.png')])
 

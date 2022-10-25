@@ -48,8 +48,14 @@ for exp in index['exp'].unique():
 df = pd.concat(df)
 
 df['area'] = (df['ell_w'] / 2) * (df['ell_h'] / 2) * np.pi
+df['volume'] = (4 / 3) * np.pi * ((np.sqrt(df['area'] / np.pi)) ** 3)
 df['roundness'] = df['ell_w'] / df['ell_h']  # always h > w
-df['black'] = df['black'].astype(int) * 100
+# df['black'] = df['black'].astype(int) * 100
+
+# TODO should be in image_index.py
+df = df[~((df['exp'] == 'DYN2020-05-15') & (df['task'] < 2380))]
+df = df[~((df['exp'] == 'ARCH2021-05-27') & (df['task'].isin([3797, 3798, 3804, 3810, 3811, 3819, 3827, 3829, 3831, 3843, 368])))]
+df = df[~((df['exp'] == 'ARCH2022-05-18') & (df['task'].isin([5742, 5744, 5876, 5877])))]
 
 tmin_dic = {row['exp']: row['timestamp'] for _, row in df.groupby('exp')['timestamp'].min().reset_index().iterrows()}
 df['t'] = df.apply(lambda row: (row['timestamp'] - tmin_dic[row['exp']]) / 3600 / 24, axis=1)
@@ -100,8 +106,6 @@ for plantid in df21['plantid'].unique():
 exp = 'ARCH2021-05-27'
 df = pd.read_csv(PATH + 'full_results.csv')
 df21 = df[df['exp'] == exp]
-df21 = df21[~df21['task'].isin([3804, 3797, 3811, 3819, 3810, 3831, 3798, 3827, 3829, 3843])]  # imagery problem
-
 
 var = 'black'
 for genotype, col in zip(df21['genotype'].unique(), ['black', 'red', 'blue', 'green', 'orange']):
@@ -152,8 +156,6 @@ for plantid in selec['plantid'].unique():
 
 df = pd.read_csv(PATH + 'full_results.csv')
 df22 = df[df['exp'] == 'ARCH2022-05-18']
-
-df22 = df22[~df22['task'].isin([5742, 5744, 5876, 5877])]
 
 genotypes = list(df22.groupby('genotype')['plantid'].nunique().sort_values(ascending=False).reset_index()['genotype'])
 
@@ -245,7 +247,6 @@ plantid = 7243
 
 selec = df[(df['exp'] == 'DYN2020-05-15') & (df['plantid'] == plantid)]
 selec = selec.sort_values('timestamp', ascending=False)
-selec = selec[~(selec['task'].isin([2377, 2379]))]
 
 from pylab import *
 from scipy.optimize import curve_fit

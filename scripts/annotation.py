@@ -203,12 +203,6 @@ for subset in ['train', 'valid']:
             else:
                 print('border')
 
-
-
-
-
-
-
             # mask = (output_vignette[:, :, 0] > 0.5).astype(np.uint8) * 255
             # edges, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             # if edges:

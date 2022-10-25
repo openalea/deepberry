@@ -4,9 +4,13 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import time
+from shapely.geometry import Polygon
+from sklearn.metrics import r2_score
 
-from grapevine.prediction import detect_berry
-from grapevine.utils import get_iou
+from deepberry.src.openalea.deepberry.prediction import detect_berry, segment_berry_scaled, load_models_berry
+from deepberry.src.openalea.deepberry.utils import ellipse_interpolation
+
+MODEL_DET, MODEL_SEG = load_models_berry('Y:/lepseBinaries/Trained_model/deepberry/')
 
 PATH = 'data/grapevine/'
 
@@ -20,6 +24,109 @@ validation_image_subset = ['ARCH2021-05-27_323_3706_180.png',
                            'ARCH2022-05-18_684_5601_240.png',
                            'DYN2020-05-15_7235_2422_330.png',
                            'ARCH2022-05-18_1705_5601_330.png']
+
+
+# TODO use it in DL codes if it's faster ? (nms)
+def IOU(pol1_xy, pol2_xy):
+    """
+    https://stackoverflow.com/questions/58435218/intersection-over-union-on-non-rectangular-quadrilaterals
+    """
+    # Define each polygon
+    polygon1_shape = Polygon(pol1_xy)
+    polygon2_shape = Polygon(pol2_xy)
+
+    # Calculate intersection and union, and the IOU
+    polygon_intersection = polygon1_shape.intersection(polygon2_shape).area
+    polygon_union = polygon1_shape.area + polygon2_shape.area - polygon_intersection
+    return polygon_intersection / polygon_union
+
+# ===== display metrics for the selected model =====================================================================
+
+res = {}
+for image_name in validation_image_subset:
+    img = cv2.cvtColor(cv2.imread(PATH + 'dataset/images/' + image_name), cv2.COLOR_BGR2RGB)
+
+    obs = df_obs[df_obs['image_name'] == image_name]
+
+    res_det = detect_berry(image=img, model=MODEL_DET)
+    pred, _ = segment_berry_scaled(image=img, model=MODEL_SEG, boxes=res_det)
+
+    obs_ell = [ellipse_interpolation(row['ell_x'], row['ell_y'], row['ell_w'], row['ell_h'], row['ell_a'], n_points=100)
+               for _, row in obs.iterrows()]
+    pred_ell = [ellipse_interpolation(row['ell_x'], row['ell_y'], row['ell_w'], row['ell_h'], row['ell_a'], n_points=100)
+               for _, row in pred.iterrows()]
+
+    plt.figure(image_name)
+    plt.gca().set_aspect('equal', adjustable='box')
+    for (ell_x, ell_y) in obs_ell:
+        plt.plot(ell_x, ell_y, 'k-')
+    for (ell_x, ell_y) in pred_ell:
+        plt.plot(ell_x, ell_y, 'r-')
+
+    for _, box in res_det.iterrows():
+        x, y, w, h = box[['x', 'y', 'w', 'h']]
+        plt.plot([x, x, x + h, x + h, x],
+                 [y + h, y, y, y + h, y + h], 'r-')
+
+    res[image_name] = {'obs': obs, 'pred': pred}
+
+
+area_obs, area_pred = [], []
+for image_name in res.keys():
+
+    obs, pred = res[image_name]['obs'], res[image_name]['pred']
+
+    obs_ell = [ellipse_interpolation(row['ell_x'], row['ell_y'], row['ell_w'], row['ell_h'], row['ell_a'], n_points=100)
+               for _, row in obs.iterrows()]
+    pred_ell = [ellipse_interpolation(row['ell_x'], row['ell_y'], row['ell_w'], row['ell_h'], row['ell_a'], n_points=100)
+               for _, row in pred.iterrows()]
+
+    plt.figure(image_name)
+    plt.gca().set_aspect('equal', adjustable='box')
+    for (ell_x, ell_y) in obs_ell:
+        plt.plot(ell_x, ell_y, 'k-')
+    for (ell_x, ell_y) in pred_ell:
+        plt.plot(ell_x, ell_y, 'r-')
+
+    D = np.zeros((len(obs_ell), len(pred_ell)))
+    for i1, e1 in enumerate(obs_ell):
+        for i2, e2 in enumerate(pred_ell):
+            D[i1, i2] = IOU(e1.T, e2.T)
+    D2 = D.copy()
+    matches, dists = [], []
+    for k in range(min(D2.shape)):
+        i, j = np.unravel_index(D2.argmax(), D2.shape)
+        d = D2[i, j]
+        if d > 0.5:
+            matches.append([i, j])
+            dists.append(d)
+        D2[i, :] = float('-inf')
+        D2[:, j] = float('-inf')
+
+    # detection accuracy
+    tp, fn, fp = len(matches), len(obs) - len(matches), len(pred) - len(matches)
+    print(tp, fn, fp)
+
+    # segmentation accuracy
+    print(np.mean(dists))
+
+    s_obs = obs.iloc[np.array(matches)[:, 0]]
+    area_obs += list((s_obs['ell_w'] / 2) * (s_obs['ell_h'] / 2) * np.pi)
+    s_pred = pred.iloc[np.array(matches)[:, 1]]
+    area_pred += list((s_pred['ell_w'] / 2) * (s_pred['ell_h'] / 2) * np.pi)
+
+x, y = np.array(area_obs), np.array(area_pred)
+plt.plot([0, 10000], [0, 10000], '-', color='grey')
+a, b = np.polyfit(x, y, 1)
+plt.plot([0, 10000], a*np.array([0, 10000]) + b, '--', color='red', label=f'y = {a:.{2}f}x {b:+.{2}f}')
+plt.plot(x, y, 'o', alpha=0.4)
+rmse = np.sqrt(np.sum((x - y) ** 2) / len(x))
+r2 = r2_score(x, y)
+bias = np.mean(y - x)
+mape = 100 * np.mean(np.abs((x - y) / x))
+print(rmse, r2, bias, mape)
+
+
 
 # ==================================================================================================================
 

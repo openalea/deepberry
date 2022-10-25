@@ -1,7 +1,7 @@
 """
-TODO Remove border pixels (different color) !
-TODO Same simple threshold for mean & individual berry: Hue=80
-TODO Use mean, not median
+TODO Remove border pixels (different color) ! ===> OK
+TODO Same simple threshold for mean & individual berry: Hue=80 ===> OK
+TODO Use mean, not median ===> OK
 """
 
 import pandas as pd

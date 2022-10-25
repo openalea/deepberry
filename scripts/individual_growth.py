@@ -16,7 +16,7 @@ index = pd.read_csv('data/grapevine/image_index.csv')
 fd = 'data/grapevine/temporal/results/'
 
 res = []
-for file in os.listdir(fd):
+for file in [f for f in os.listdir(fd) if f[-4:] == '.csv']:
     print(file)
     res.append(pd.read_csv(fd + file))
 res = pd.concat(res)
@@ -56,7 +56,7 @@ df_berry = pd.DataFrame(df_berry, columns=['angle', 'id', 'q1', 'q2', 'mape', 'n
 
 #fig, axs = plt.subplots(2, 5)
 plt.figure()
-K = 8
+K = 4
 # ids = list(df_berry[df_berry['n'] > 40].sort_values('dif')['id'].iloc[:25])
 # df_berry_selec = df_berry.sort_values('n', ascending=False).iloc[:(K ** 2)].sort_values('q1')
 df_berry_selec = df_berry[df_berry['n'] > 100].sort_values('mape', ascending=True)[::1].iloc[:(K ** 2)]
@@ -64,21 +64,28 @@ for i, (_, row) in enumerate(df_berry_selec.iterrows()):
     angle, id, q1, q2 = row['angle'], row['id'], (row['q1'] - 1) * 100, row['q2']
     print(i, id)
     s = selec[(selec['angle'] == angle) & (selec['berryid'] == id)].sort_values('t')
-    x, y = np.array(s['t']), np.array(s['area'])
+    # x, y = np.array(s['t']), np.array(s['area'])
+    x, y = np.array(s['t']), np.array(s['hue'])
     # f = savgol_smoothing_function(x, y, dw=3, polyorder=2, repet=3, monotony=False)
     y_averaged = uniform_filter1d(y, size=30, mode='nearest')
-    i_black = next(i for i, val in enumerate(uniform_filter1d(np.array(s['black']), size=30, mode='nearest'))
-                   if val >= 50)
 
     mape = 100 * np.mean(np.abs((y_averaged - y) / y_averaged))
+
+    # one graph per berry (COLOR)
+    ax = plt.subplot(K, K, i + 1)
+    plt.plot(x, y, 'k.')
+    plt.plot(x, y_averaged, '-', color='r', linewidth=2)
+    plt.text(0.99, 0.03, 'MAPE={}%\na{} id{}'.format(round(mape, 2), int(angle), int(id)),
+             horizontalalignment='right', verticalalignment='bottom', transform=ax.transAxes)
+    plt.xlim(0, max(selec['t']) + 2)
 
     # # one graph per berry
     # ax = plt.subplot(K, K, i + 1)
     # # col = phm_display.PALETTE[i]/255.
     # # plt.plot(x, y, '.', color='k')
-    # plt.scatter(x, y, marker='.', c=np.array(['darkblue' if c == 100 else 'limegreen' for c in s['black']]))
+    # plt.scatter(x, y, marker='.', c=np.array([cv2.cvtColor(np.uint8([[[h, 255, 150]]]),
+    #                                                        cv2.COLOR_HSV2RGB)[0][0] / 255. for h in s['hue']]))
     # plt.plot(x, y_averaged, '-', color='r', linewidth=2)
-    # plt.plot(x[i_black], y_averaged[i_black], 'r', marker='.', markersize=20)
     # plt.text(0.03, 0.97, 'q1={}\nq2={}'.format(round(q1, 2), round(q2, 2)),
     #          horizontalalignment='left', verticalalignment='top', transform=ax.transAxes)
     # plt.text(0.99, 0.03, 'MAPE={}%\na{} id{}'.format(round(mape, 2), int(angle), int(id)),
@@ -86,16 +93,17 @@ for i, (_, row) in enumerate(df_berry_selec.iterrows()):
     # plt.xlim(0, max(selec['t']) + 2)
 
     # all berries in the same graph
+    i_black = next(i for i, val in enumerate(uniform_filter1d(np.array(s['hue']), size=30, mode='nearest'))
+                   if val >= 60)
     y_scaled = y_averaged / np.max(y_averaged)
     plt.plot(x[:(i_black + 1)], y_scaled[:(i_black + 1)], '-', color='limegreen', linewidth=0.4)
     plt.plot(x[i_black:], y_scaled[i_black:], '-', color='darkblue', linewidth=0.4)
     # plt.scatter(x, y_scaled, marker='.',
     #             c=np.array(['darkblue' if c == 100 else 'limegreen' for c in s['black']]))
     plt.plot(x[i_black], y_scaled[i_black], color='orange', marker='.', markersize=10)
-    gb = selec.groupby('task')[['area', 'black', 't']].mean().reset_index().sort_values('t')
+    gb = selec.groupby('task')[['area', 't']].mean().reset_index().sort_values('t')
     plt.plot(gb['t'], gb['area'] / np.max(gb['area']), 'r-')
     # a_min = np.min(gb['area'] / np.max(gb['area']))
-    # plt.plot(gb['t'], gb['black'] * ((1 - a_min)/100) + a_min, '-', color='orange')
 
 
 

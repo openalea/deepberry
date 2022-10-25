@@ -12,7 +12,6 @@ from deepberry.src.openalea.deepberry.utils import ellipse_interpolation
 
 from functools import partial
 from pycpd import AffineRegistration, RigidRegistration, DeformableRegistration
-from shapely.geometry import box, Polygon
 
 import time
 
@@ -21,7 +20,7 @@ import time
 PALETTE = np.array(
     [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0], [204, 121, 167], [0, 158, 115],
      [0, 114, 178], [230, 159, 0], [140, 86, 75], [0, 255, 255], [255, 0, 100], [0, 77, 0], [100, 0, 255],
-     [100, 0, 0], [0, 0, 100], [100, 100, 0], [0, 100,100], [100, 0, 100], [255, 100, 100]])
+     [100, 0, 0], [0, 0, 100], [100, 100, 0], [0, 100, 100], [100, 0, 100], [255, 100, 100]])
 PALETTE = np.array(20 * list(PALETTE) + [[0, 0, 0]])
 
 PATH = 'data/grapevine/results/'
@@ -32,32 +31,15 @@ df = pd.read_csv(PATH + 'full_results.csv')
 index = pd.read_csv('data/grapevine/image_index.csv')
 
 # 2020
-df20 = df[(df['exp'] == 'DYN2020-05-15') & ~(df['task'] < 2380)]
+df20 = df[df['exp'] == 'DYN2020-05-15']
 t_camera = 1592571441  # np.mean(df20.groupby('task')['timestamp'].mean().sort_values()[[2566, 2559]].values)
 df20.loc[df20['timestamp'] > t_camera, ['ell_x', 'ell_y']] += np.array([-4.2, -437.8])
 
 # 2021
 df21 = df[df['exp'] == 'ARCH2021-05-27']
-df21 = df21[~(df21['task'].isin([3797, 3798, 3804, 3810, 3811, 3819, 3827, 3829, 3831, 3843, 3686, 3687, 3685]))]
 df21 = df21[df21['genotype'].isin(['V.vinifera/V6863_H10-PL3', 'V.vinifera/V6860_DO4-PL4'])]
 
 # ====================================================================================================================
-
-
-# TODO use it in DL codes if it's faster ? (nms)
-def IOU(pol1_xy, pol2_xy):
-    """
-    https://stackoverflow.com/questions/58435218/intersection-over-union-on-non-rectangular-quadrilaterals
-    """
-    # Define each polygon
-    polygon1_shape = Polygon(pol1_xy)
-    polygon2_shape = Polygon(pol2_xy)
-
-    # Calculate intersection and union, and the IOU
-    polygon_intersection = polygon1_shape.intersection(polygon2_shape).area
-    polygon_union = polygon1_shape.area + polygon2_shape.area - polygon_intersection
-    return polygon_intersection / polygon_union
-
 
 def get_rgb_ellipses(ellipses, index, exp, plantid, task, angle, grapeid=0, save=False):
 
@@ -78,6 +60,7 @@ def get_rgb_ellipses(ellipses, index, exp, plantid, task, angle, grapeid=0, save
         row_index = row_index.iloc[0]
 
     path1 = 'Z:/{}/{}/{}.png'.format(exp, task, row_index['imgguid'])
+
     img = cv2.cvtColor(cv2.imread(path1), cv2.COLOR_BGR2RGB)
 
     for _, ell in selec_ellipses.iterrows():
@@ -96,10 +79,6 @@ def get_rgb_ellipses(ellipses, index, exp, plantid, task, angle, grapeid=0, save
 
 
 def scaled_cpd(X, Y, X_add=None, Y_add=None, transformation='affine'):
-
-    if (len(X) <= 2) or (len(Y) <= 2):
-        return Y
-
     """
     Coherent Point Drift algorithm, for point set registration, with inputs scaling.
 
@@ -109,6 +88,10 @@ def scaled_cpd(X, Y, X_add=None, Y_add=None, transformation='affine'):
     Y_add: array of shape (n2) containing an additional feature describing the points in Y
     transformation: type of registration, among 'rigid', 'affine', 'deformable'
     """
+
+    if (len(X) <= 2) or (len(Y) <= 2):
+        return Y
+
     # scaling of X and Y
     q, m = 0.5 * np.max(np.max(X, axis=0) - np.min(X, axis=0)), np.mean(X, axis=0)
     X_scaled, Y_scaled = (X - m) / q, (Y - m) / q
@@ -136,7 +119,7 @@ def distance_matrix(sets):
     sets = list of ellipses sets, where each "set" is a dataframe with x,y,w,h,a parameters for each ellipse.
     """
 
-    M = np.zeros((len(sets), len(sets), 7))
+    M = np.zeros((len(sets), len(sets), 3))
     M[np.arange(len(M)), np.arange(len(M))] = float('inf')  # diagonal
 
     for i1 in range(len(M) - 1):
@@ -156,17 +139,15 @@ def distance_matrix(sets):
 
             centers2_reg = scaled_cpd(centers1, centers2, transformation='affine')
             centers1_reg = scaled_cpd(centers2, centers1, transformation='affine')
-            centers2_reg_d = scaled_cpd(centers1, centers2, transformation='deformable')
-            centers1_reg_d = scaled_cpd(centers2, centers1, transformation='deformable')
-            centers2_reg_a = scaled_cpd(centers1, centers2, set1['area'], set2['area'], transformation='affine')
-            centers1_reg_a = scaled_cpd(centers2, centers1, set2['area'], set1['area'], transformation='affine')
+            # centers2_reg_d = scaled_cpd(centers1, centers2, transformation='deformable')
+            # centers1_reg_d = scaled_cpd(centers2, centers1, transformation='deformable')
+            # centers2_reg_a = scaled_cpd(centers1, centers2, set1['area'], set2['area'], transformation='affine')
+            # centers1_reg_a = scaled_cpd(centers2, centers1, set2['area'], set1['area'], transformation='affine')
 
             # ===== distance matrix ==============
             mats, scores = [], []
             for ctr1, ctr2 in [[centers1, centers2],
-                               [centers1, centers2_reg], [centers2, centers1_reg],
-                               [centers1, centers2_reg_d], [centers2, centers1_reg_d],
-                               [centers1, centers2_reg_a], [centers2, centers1_reg_a]]:
+                               [centers1, centers2_reg], [centers2, centers1_reg]]:
                 D = np.zeros((len(ctr1), len(ctr2)))
                 for k, c1 in enumerate(ctr1):
                     D[k] = np.sqrt(np.sum((c1 - ctr2) ** 2, axis=1))
@@ -174,6 +155,7 @@ def distance_matrix(sets):
                 scores.append(d)
 
             M[[i1, i2], [i2, i1]] = scores
+            print(scores)
 
     return M
 
@@ -226,70 +208,70 @@ def pairs_order(M, threshold=8, i_start=0):
     return pairs
 
 
-def topo_features(ellipses, nvecs=3):
-
-    centers = np.array(ellipses[['ell_x', 'ell_y']])
-
-    # distance matrix
-    D = np.zeros((len(ellipses), len(ellipses)))
-    for i, c in enumerate(centers):
-        D[i] = np.sqrt(np.sum((c - centers) ** 2, axis=1))
-        D[i, i] = float('inf')
-
-    vecs = []
-    for i_berry in range(len(centers)):
-        vec = []
-        ng = D[i_berry, :].argsort()[:nvecs]
-        x, y = centers[i_berry]
-        for i_ng in ng:
-            x_ng, y_ng = centers[i_ng]
-            vec += [x - x_ng, y - y_ng]
-        vecs.append(vec)
-
-    return np.array(vecs)
-
-
-def topo_registration(s1, s2, nvecs=3):
-    """ s1, s2 = two sets (dataframes) of ellipses """
-
-    # TODO : vec[d1, a1, d2, a2, d3, a3] for rigid transfo (consistent with rotation+translation+reflection)
-
-    # TODO vec[[d, a]i], imax = 5, 10 ? faire un matching entre les deux vec et prendre la d mediane
-
-    # topologic features extraction
-    n = min(nvecs, min(len(s1), len(s2)))
-    ft1 = topo_features(s1, nvecs=n)
-    ft2 = topo_features(s2, nvecs=n)
-
-    # distance matrix
-    F = np.zeros((len(ft1), len(ft2)))
-    for i, vec in enumerate(ft1):
-        F[i] = np.sqrt(np.sum(np.abs(vec - ft2), axis=1))
-
-    # feature matching (greedy algorithm)
-    matches, _ = matching(F)
-    good_matches = matches[:(int(len(matches) / 4))]
-
-    centers1 = np.array(s1[['ell_x', 'ell_y']])
-    centers2 = np.array(s2[['ell_x', 'ell_y']])
-
-    # plt.figure()
-    # plt.gca().invert_yaxis()
-    # plt.plot(centers1[:, 0], centers1[:, 1], 'bo', alpha=0.5)
-    # plt.plot(centers2[:, 0], centers2[:, 1], 'ro', alpha=0.5)
-    # for i1, i2 in good_matches:
-    #     (x1, y1), (x2, y2) = centers1[i1], centers2[i2]
-    #     plt.plot([x1, x2], [y1, y2], 'g-')
-
-    # translation registration
-    dx, dy = np.mean(centers1[good_matches[:, 0]] - centers2[good_matches[:, 1]], axis=0)
-
-    # plt.figure()
-    # plt.plot(centers1[:, 0], centers1[:, 1], 'bo', alpha=0.5)
-    # centers2_reg = centers2 + np.array([dx, dy])
-    # plt.plot(centers2_reg[:, 0], centers2_reg[:, 1], 'ro', alpha=0.5)
-
-    return np.array([dx, dy])
+# def topo_features(ellipses, nvecs=3):
+#
+#     centers = np.array(ellipses[['ell_x', 'ell_y']])
+#
+#     # distance matrix
+#     D = np.zeros((len(ellipses), len(ellipses)))
+#     for i, c in enumerate(centers):
+#         D[i] = np.sqrt(np.sum((c - centers) ** 2, axis=1))
+#         D[i, i] = float('inf')
+#
+#     vecs = []
+#     for i_berry in range(len(centers)):
+#         vec = []
+#         ng = D[i_berry, :].argsort()[:nvecs]
+#         x, y = centers[i_berry]
+#         for i_ng in ng:
+#             x_ng, y_ng = centers[i_ng]
+#             vec += [x - x_ng, y - y_ng]
+#         vecs.append(vec)
+#
+#     return np.array(vecs)
+#
+#
+# def topo_registration(s1, s2, nvecs=3):
+#     """ s1, s2 = two sets (dataframes) of ellipses """
+#
+#     # TODO : vec[d1, a1, d2, a2, d3, a3] for rigid transfo (consistent with rotation+translation+reflection)
+#
+#     # TODO vec[[d, a]i], imax = 5, 10 ? faire un matching entre les deux vec et prendre la d mediane
+#
+#     # topologic features extraction
+#     n = min(nvecs, min(len(s1), len(s2)))
+#     ft1 = topo_features(s1, nvecs=n)
+#     ft2 = topo_features(s2, nvecs=n)
+#
+#     # distance matrix
+#     F = np.zeros((len(ft1), len(ft2)))
+#     for i, vec in enumerate(ft1):
+#         F[i] = np.sqrt(np.sum(np.abs(vec - ft2), axis=1))
+#
+#     # feature matching (greedy algorithm)
+#     matches, _ = matching(F)
+#     good_matches = matches[:(int(len(matches) / 4))]
+#
+#     centers1 = np.array(s1[['ell_x', 'ell_y']])
+#     centers2 = np.array(s2[['ell_x', 'ell_y']])
+#
+#     # plt.figure()
+#     # plt.gca().invert_yaxis()
+#     # plt.plot(centers1[:, 0], centers1[:, 1], 'bo', alpha=0.5)
+#     # plt.plot(centers2[:, 0], centers2[:, 1], 'ro', alpha=0.5)
+#     # for i1, i2 in good_matches:
+#     #     (x1, y1), (x2, y2) = centers1[i1], centers2[i2]
+#     #     plt.plot([x1, x2], [y1, y2], 'g-')
+#
+#     # translation registration
+#     dx, dy = np.mean(centers1[good_matches[:, 0]] - centers2[good_matches[:, 1]], axis=0)
+#
+#     # plt.figure()
+#     # plt.plot(centers1[:, 0], centers1[:, 1], 'bo', alpha=0.5)
+#     # centers2_reg = centers2 + np.array([dx, dy])
+#     # plt.plot(centers2_reg[:, 0], centers2_reg[:, 1], 'ro', alpha=0.5)
+#
+#     return np.array([dx, dy])
 
 
 # def get_features2(ellipses):
@@ -556,12 +538,13 @@ for df_exp in [df21, df20]:
         selec = df_exp[(df_exp['plantid'] == plantid) & (df_exp['grapeid'] == grapeid)]
         angles = list(selec.groupby('angle').size().sort_values(ascending=False).index)
 
-        print('===', plantid, grapeid, '===')
+        print('=====', plantid, grapeid, '=====')
 
         for angle in [k * 30 for k in range(12)]:
 
+            # print(plantid, grapeid, angle)
+
             s = selec[selec['angle'] == angle]
-            print(len(s))
 
             tasks = list(s.groupby('task')['timestamp'].mean().sort_values().reset_index()['task'])
             # ellipses_sets = [s[s['task'] == task][['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']] for task in tasks]
@@ -570,34 +553,39 @@ for df_exp in [df21, df20]:
             # TODO don't forget this later in the code!
             ellipses_sets = [s for s in ellipses_sets if len(s) > 1]
 
-            n_berry = round(len(s) / len(s['task'].unique()), 1)
-            print(s.iloc[0]['exp'], plantid, grapeid, angle, n_berry, len(ellipses_sets))
+            # n_berry = round(len(s) / len(s['task'].unique()), 1)
+            # print(s.iloc[0]['exp'], plantid, grapeid, angle, n_berry, len(ellipses_sets))
 
-            matrix_path = 'data/grapevine/temporal/distance_matrix/{}_{}_{}_{}.npy'.format(s.iloc[0]['exp'], plantid, grapeid, angle)
+            matrix_path = 'data/grapevine/temporal/distance_matrix/{}_{}_{}_{}.npy'.format(
+                s.iloc[0]['exp'], plantid, grapeid, angle)
 
             if not os.path.isfile(matrix_path):
                 print('computing distance matrix...')
-                t0 = time.time()
                 M = distance_matrix(ellipses_sets)
                 np.save(matrix_path, M)
-                print('{}min'.format(round((time.time() - t0) / 60, 1)))
-            else:
-                M = np.load(matrix_path)
 
-            # m = np.argmin(M, axis=2).flatten()
-            # print(len(M), [round(len(m[m == k]) / len(m), 2) for k in range(4)])
+            M = np.load(matrix_path)
 
-            # TODO : seems useless, but test it again with corrected params and more grapes
-            # M[:, :, 3] = 999999
+            if len(ellipses_sets) != len(M):
+                print(plantid, grapeid)
+
+            if M.shape[2] > 3:
+                M[:, :, [3, 4, 5, 6]] = float('inf')
+            # print(len(M), [round(len(m[m == k]) / len(m), 2) for k in range(3)])
 
             set_threshold = 8
 
-            # TODO : test automatic i_start selection on more grapes
-            i_start = np.argmax([len(s) for s in ellipses_sets])
+            # selecting optimal value for i_start
+            i_best, k_max = None, float('-inf')
+            for i_start in range(len(ellipses_sets)):
+                set_pairs = pairs_order(M, i_start=i_start, threshold=set_threshold)
+                k_above = [k for k, (i, j) in enumerate(set_pairs) if np.min(M[i, j]) > set_threshold]
+                k_fail = len(ellipses_sets) - 1 if not k_above else k_above[0]
+                if k_fail > k_max:
+                    i_best, k_max = i_start, k_fail
 
+            i_start = i_best
             set_pairs = pairs_order(M, i_start=i_start, threshold=set_threshold)
-            res = [(k, round(np.min(M[i, j]), 1)) for k, (i, j) in enumerate(set_pairs) if np.min(M[i, j]) > set_threshold]
-            print(np.array(res[:1]))
 
             # ===== match berry ids =====
             # /!\ don't forget that some dates may be removed if not enough ellipse detections
@@ -613,14 +601,9 @@ for df_exp in [df21, df20]:
 
                 # TODO REFACTOR function
                 if np.argmin(M[i1, i2]) == 1:
-                    reg = AffineRegistration(**{'X': centers1, 'Y': centers2})
-                    centers2 = reg.register()[0]
+                    centers2 = scaled_cpd(centers1, centers2, transformation='affine')
                 elif np.argmin(M[i1, i2]) == 2:
-                    reg = AffineRegistration(**{'X': centers2, 'Y': centers1})
-                    centers1 = reg.register()[0]
-                elif np.argmin(M[i1, i2]) == 3:
-                    reg = topo_registration(s1, s2)
-                    centers2 = centers2 + reg
+                    centers1 = scaled_cpd(centers2, centers1, transformation='affine')
 
                 # berry distance matrix
                 D = np.zeros((len(centers1), len(centers2)))
@@ -639,58 +622,33 @@ for df_exp in [df21, df20]:
                 ellipses_sets[i2]['berryid'] = new_indexes
                 # s.at[s2.index, 'berryid'] = new_indexes
 
-            # # TODO remove
-            #
-            # for k in range(len(ellipses_sets)):
-            #     ellipses_sets[k]['iterative'] = False
-            #
-            # for k in range(len(ellipses_sets) - 1)[::1]:
-            #     #i1, i2 = np.random.choice(np.arange(len(ellipses_sets)), 2, replace=False)
-            #     i1, i2 = k, k + 1
-            #     print(i1, i2)
-            #     s1, s2 = ellipses_sets[i1], ellipses_sets[i2]
-            #
-            #     pair = pd.concat((s1, s2))
-            #     vec = []
-            #     for berryid in pair['berryid']:
-            #         s = pair[pair['berryid'] == berryid]
-            #         if len(s) == 2 and berryid != -1:
-            #             vec.append([np.diff(s['ell_x']), np.diff(s['ell_y'])])
-            #     dx, dy = np.median(np.array(vec), axis=0)[:, 0]
-            #
-            #     # plt.figure()
-            #     # plt.gca().set_aspect('equal', adjustable='box')
-            #     # for _, row in s1.iterrows():
-            #     #     x, y, w, h, a = row['ell_x'], row['ell_y'], row['ell_w'], row['ell_h'], row['ell_a']
-            #     #     ell = ellipse_interpolation(x, y, w, h, a, n_points=100)
-            #     #     plt.plot(ell[0], ell[1], 'k-')
-            #     # for _, row in s2.iterrows():
-            #     #     x, y, w, h, a = row['ell_x'], row['ell_y'], row['ell_w'], row['ell_h'], row['ell_a']
-            #     #     ell = ellipse_interpolation(x, y, w, h, a, n_points=100)
-            #     #     plt.plot(ell[0] - dx, ell[1] - dy, 'b-')
-            #
-            #     for k2 in range(len(s2)):
-            #         if s2.iloc[k2]['berryid'] == -1:
-            #             pos2 = s2.iloc[k2][['ell_x', 'ell_y']]
-            #             dists = np.sqrt(np.sum((pos2 - (s1[['ell_x', 'ell_y']] + np.array([dx, dy]))) ** 2, axis=1))
-            #             if np.min(dists) < berry_threshold:
-            #                 a1, a2 = s1.iloc[np.argmin(dists)]['area'], s2.iloc[k2]['area']
-            #                 if min((a1, a2)) / max((a1, a2)) > 0.5:
-            #                     id_target = s1.iloc[np.argmin(dists)]['berryid']
-            #                     # plt.plot(pos2[0] - dx, pos2[1] - dy, 'go')
-            #                     if id_target != -1:
-            #                         print('match')
-            #                         ellipses_sets[i2]['berryid'].iloc[k2] = s1.iloc[np.argmin(dists)]['berryid']
-            #                         ellipses_sets[i2]['iterative'].iloc[k2] = True
-            #
-            #     print(np.sum([len(s[s['berryid'] == -1]) for s in ellipses_sets]))
-
-
-
             # ===== final res =====
 
             final_res = pd.concat(ellipses_sets)
-            final_res.to_csv('data/grapevine/temporal/results/{}_{}_{}_{}.csv'.format(s.iloc[0]['exp'], plantid, grapeid, angle))
+
+            # print(len(final_res[final_res['berryid'] != -1]) / len(final_res) * 100)
+            # gb = final_res.groupby('t')['berryid'].agg(['nunique', 'size']).reset_index()
+            # plt.plot(gb['t'], 100 * gb['nunique'] / gb['size'], '.-', label=str(out))
+
+            final_res.to_csv('data/grapevine/temporal/results/{}_{}_{}_{}.csv'.format(
+                s.iloc[0]['exp'], plantid, grapeid, angle))
+
+# ===== effect of t0 choice ==========================================================
+
+# exp = 'DYN2020-05-15'  # 'ARCH2021-05-27'
+selec = df20
+for plantid in selec['plantid'].unique():
+    s0 = selec[selec['plantid'] == plantid]
+    for grapeid in s0['grapeid'].unique():
+        s = s0[s0['grapeid'] == grapeid]
+        plt.ylim((0, 1))
+        gb = s.groupby('task')['t'].agg(['mean', 'size']).reset_index().sort_values('mean')
+        plt.plot(gb['mean'], gb['size'] / np.max(gb['size']), 'k-')
+        # for angle in [k * 30 for k in range(12)]:
+        #     s_angle = s[s['angle'] == angle]
+        #     gb = s_angle.groupby('t')['area'].agg(['mean', 'size']).reset_index().sort_values('t')
+
+
 
 # ===== explore tracking results ====================================================================================
 

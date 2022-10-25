@@ -4,9 +4,9 @@ import cv2
 import numpy as np
 import time
 
-from deepberry.src.openalea.deepberry.prediction import detect_berry, segment_berry_scaled, classify_berry, load_models_berry
+from deepberry.src.openalea.deepberry.prediction import detect_berry, segment_berry_scaled, load_models_berry
 
-MODEL_DET, MODEL_SEG = load_models_berry('deepberry_data/')
+MODEL_DET, MODEL_SEG = load_models_berry('Y:/lepseBinaries/Trained_model/deepberry/')
 
 PATH = 'data/grapevine/results/'
 

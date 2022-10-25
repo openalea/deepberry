@@ -181,6 +181,7 @@ def mean_hue_berry(image, ellipses):
     res = ellipses.copy()
     for _, row in ellipses.iterrows():
         x, y, w, h, a = list(row[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']])
+        w, h = w * 0.85, h * 0.85  # remove border pixels
         mask = cv2.ellipse(np.float32(image[:, :, 0] * 0), (round(x), round(y)), (round(w / 2), round(h / 2)),
                            a, 0., 360, (1), -1)
         pixels = image[mask == 1]  # r, g, b

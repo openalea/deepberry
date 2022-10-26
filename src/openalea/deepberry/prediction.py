@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import pandas as pd
+from scipy.stats import circmean
 
 from deepberry.src.openalea.deepberry.utils import ellipse_interpolation, nms
 #from openalea.deepberry.utils import ellipse_interpolation, nms
@@ -175,18 +176,31 @@ def segment_berry_scaled(image, model, boxes, seg_size=128):
     return res, res_ellipse
 
 
-def mean_hue_berry(image, ellipses):
+def mean_hue_berry(image, ellipses, edge_spacing=3, remove_overlap=True):
+    """
+    edge_spacing : number of pixels removed along ellipse edges
+    """
 
     hues = []
+    masks = []
     res = ellipses.copy()
     for _, row in ellipses.iterrows():
         x, y, w, h, a = list(row[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']])
-        w, h = w * 0.85, h * 0.85  # remove border pixels
-        mask = cv2.ellipse(np.float32(image[:, :, 0] * 0), (round(x), round(y)), (round(w / 2), round(h / 2)),
+        e = min(int(w / 4), edge_spacing)  # to not divide w, h by more than 2. (w is used because w <= h)
+        w2, h2 = w - (2 * e), h - (2 * e)
+        mask = cv2.ellipse(np.float32(image[:, :, 0] * 0), (round(x), round(y)), (round(w2 / 2), round(h2 / 2)),
                            a, 0., 360, (1), -1)
-        pixels = image[mask == 1]  # r, g, b
+        masks.append(mask)
+
+    mask_sum = np.sum(masks, axis=0)
+    for mask in masks:
+        pixels = image[mask == 1]
+        if remove_overlap:
+            px_nonoverlap = image[(mask == 1) & (mask_sum == 1)]
+            pixels = px_nonoverlap if len(px_nonoverlap) / len(pixels) < 0.2 else pixels
+
         pixels_hsv = cv2.cvtColor(np.array([pixels]), cv2.COLOR_RGB2HSV)[0]
-        hue = np.mean(pixels_hsv, axis=0)[0]
+        hue = circmean(pixels_hsv[:, 0], low=0, high=180)
         hues.append(hue)
     res['hue'] = hues
     return res

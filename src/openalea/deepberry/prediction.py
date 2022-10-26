@@ -197,7 +197,7 @@ def mean_hue_berry(image, ellipses, edge_spacing=3, remove_overlap=True):
         pixels = image[mask == 1]
         if remove_overlap:
             px_nonoverlap = image[(mask == 1) & (mask_sum == 1)]
-            pixels = px_nonoverlap if len(px_nonoverlap) / len(pixels) < 0.2 else pixels
+            pixels = px_nonoverlap if len(px_nonoverlap) / len(pixels) > 0.2 else pixels
 
         pixels_hsv = cv2.cvtColor(np.array([pixels]), cv2.COLOR_RGB2HSV)[0]
         hue = circmean(pixels_hsv[:, 0], low=0, high=180)

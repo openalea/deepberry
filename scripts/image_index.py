@@ -64,19 +64,19 @@ df = pd.read_csv('data/copy_from_database/images_grapevine21.csv')
 df_plant = pd.read_csv('data/copy_from_database/plants_grapevine21.csv')
 
 # TODO remove
-# plantid = np.random.choice(df['plantid'].unique())
-plantid = 7788
-selec = df[df['plantid'] == plantid]
-# task = np.random.choice(selec['taskid'].unique())
-task = 3741
-s = selec[selec['taskid'] == task]
-print(len(s))
-s = s.sort_values('acquisitiondate')
-for k, (_, row) in enumerate(s.iloc[:15].iterrows()):
-    path = 'Z:/{}/{}/{}.png'.format('ARCH2021-05-27', row['taskid'], row['imgguid'])
-    img = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
-    plt.figure(k)
-    plt.imshow(img)
+# # plantid = np.random.choice(df['plantid'].unique())
+# plantid = 7788
+# selec = df[df['plantid'] == plantid]
+# # task = np.random.choice(selec['taskid'].unique())
+# task = 3741
+# s = selec[selec['taskid'] == task]
+# print(len(s))
+# s = s.sort_values('acquisitiondate')
+# for k, (_, row) in enumerate(s.iloc[:15].iterrows()):
+#     path = 'Z:/{}/{}/{}.png'.format('ARCH2021-05-27', row['taskid'], row['imgguid'])
+#     img = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
+#     plt.figure(k)
+#     plt.imshow(img)
 
 df = df[df['viewtypeid'] == 3]  # xyz camera
 df['exp'] = 'ARCH2021-05-27'
@@ -161,14 +161,19 @@ index = pd.read_csv('data/grapevine/image_index.csv')
 # ===== verify image_index coherency ===============================================================================
 
 selec = index[index['exp'] == 'ARCH2021-05-27']
+selec = selec[selec['genotype'].isin(['V.vinifera/V6863_H10-PL3', 'V.vinifera/V6860_DO4-PL4'])]
 
-gb = selec.groupby(['plantid', 'grapeid', 'taskid']).size().reset_index()
-plantid, grapeid, task = gb.sample().iloc[0][['plantid', 'grapeid', 'taskid']]
-s = selec[(selec['plantid'] == plantid) & (selec['grapeid'] == grapeid) & (selec['taskid'] == task)]
-for _, row in s.iterrows():
+# gb = selec.groupby(['plantid', 'grapeid', 'taskid']).size().reset_index()
+# plantid, grapeid, task = gb.sample().iloc[0][['plantid', 'grapeid', 'taskid']]
+plantid = sorted(selec['plantid'].unique())[6]
+task = sorted(selec['taskid'].unique())[20]
+s = selec[(selec['plantid'] == plantid) & (selec['taskid'] == task)]
+print(len(s))
+s = s.sort_values('timestamp')
+for k, (_, row) in enumerate(s[::2].iterrows()):
     path = 'Z:/{}/{}/{}.png'.format(row['exp'], row['taskid'], row['imgguid'])
     img = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
-    plt.figure(row['imgangle'])
+    plt.figure(k)
     plt.imshow(img)
 
 # ===== extract images =============================================================================================

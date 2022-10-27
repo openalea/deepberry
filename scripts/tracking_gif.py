@@ -13,14 +13,14 @@ index = pd.read_csv('data/grapevine/image_index.csv')
 fd = 'data/grapevine/temporal/results/'
 
 res = []
-for file in os.listdir(fd):
+for file in [f for f in os.listdir(fd) if f[-4:] == '.csv']:
     print(file)
     res.append(pd.read_csv(fd + file))
 res = pd.concat(res)
 
 # =================================================================================================================
 
-exp = 'DYN2020-05-15'  # 'ARCH2021-05-27'
+exp = 'ARCH2021-05-27'  # 'DYN2020-05-15'
 res_selec = res[res['exp'] == exp]
 
 # gb = res_selec.groupby(['plantid', 'grapeid']).size().reset_index()
@@ -32,14 +32,13 @@ n_frames = np.max(res_selec.groupby('plantid')['task'].nunique())
 
 # for plantid in res_selec['plantid'].unique():
 
-plantid = 7238
+gb = res_selec.groupby(['plantid', 'grapeid']).size().reset_index()
+for plantid, grapeid in np.array(gb[['plantid', 'grapeid']]):
 
-grapeid = 0
+    selec0 = res_selec[(res_selec['plantid'] == plantid) & (res_selec['grapeid'] == grapeid)]
 
-selec0 = res_selec[(res_selec['plantid'] == plantid) & (res_selec['grapeid'] == grapeid)]
-
-# angle = selec0.groupby('angle').size().sort_values().index[-1]
-for angle in [k * 30 for k in range(12)]:
+    angle = selec0.groupby('angle').size().sort_values().index[-1]
+    # for angle in [k * 30 for k in range(12)]:
 
     selec = selec0[selec0['angle'] == angle]
 
@@ -78,25 +77,15 @@ for angle in [k * 30 for k in range(12)]:
 
                 img = cv2.ellipse(img, (round(x), round(y)), (round(w / 2), round(h / 2)), a, 0., 360,
                                   col, -1)
-                # # transparency
-                # overlay = img.copy()
-                # overlay = cv2.ellipse(overlay, (round(x), round(y)), (round(w / 2), round(h / 2)), a, 0., 360,
-                #                       col, -1)
-                # alpha = 0.3
-                # img = cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
 
-                # if row['iterative']:
-                #     img = cv2.ellipse(img, (round(x), round(y)), (round(w / 2), round(h / 2)), a, 0., 360,
-                #                       [255, 0, 0], 7)
-                # else:
                 img = cv2.ellipse(img, (round(x), round(y)), (round(w / 2), round(h / 2)), a, 0., 360,
                                   [0, 0, 0], 3)
             else:
                 img = cv2.ellipse(img, (round(x), round(y)), (round(w / 2), round(h / 2)), a, 0., 360,
                                   [255, 255, 255], 5)
 
-        plt.figure('{}_{}'.format(i_task, task))
-        plt.imshow(img)
+        # plt.figure('{}_{}'.format(i_task, task))
+        # plt.imshow(img2)
 
         # img_save = cv2.resize(img, tuple((np.array([2048, 2448]) / 4).astype(int)))
         # plt.imsave('data/videos/gif_imgs4/{}.png'.format(str(i_task).zfill(3)), img_save)
@@ -108,8 +97,12 @@ for angle in [k * 30 for k in range(12)]:
         img2[:s1, :, :] = img
 
         t = str(i_task + 1).zfill(len(str(len(tasks))))
-        img2 = cv2.putText(img2, '{}_{}_{}_{} | t = {}/{}'.format(exp, plantid, grapeid, angle, t, len(tasks)),
+        # img2 = cv2.putText(img2, '{}_{}_{}_{} | t = {}/{}'.format(exp, plantid, grapeid, angle, t, len(tasks)),
+        #                    (10, int(s1 * 1.04)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
+        img2 = cv2.putText(img2, '{}_{}_{}_{} | task = {}'.format(exp, plantid, grapeid, angle, task),
                            (10, int(s1 * 1.04)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
+        # plt.figure()
+        # plt.imshow(img2)
 
         imgs.append(img2)
 
@@ -121,6 +114,6 @@ for angle in [k * 30 for k in range(12)]:
     fps = 6
     # img = imgs_gif[0]  # extract first image from iterator
     img = next(imgs_gif)
-    img.save(fp='data/videos/berry_tracking/multi_angle/{}_{}_{}_{}_{}fps.gif'.format(
-        exp, plantid, grapeid, angle, fps),
+    img.save(fp='data/videos/berry_individual_{}fps.gif'.format(
+        fps),
              format='GIF', append_images=imgs_gif, save_all=True, duration=1000/fps, loop=0)

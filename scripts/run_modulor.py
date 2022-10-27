@@ -31,22 +31,11 @@ PATH_DATA = '/home/daviet/deepberry_data/'
 PATH_CACHE = '/mnt/data/phenoarch_cache/'
 PATH_MODEL = '/mnt/phenomixNasShare/lepseBinaries/Trained_model/deepberry/'
 
-MODEL_DET, MODEL_SEG = load_models_berry(PATH_DATA)
+MODEL_DET, MODEL_SEG = load_models_berry(PATH_MODEL)
 
 index = pd.read_csv(PATH_DATA + 'image_index.csv')
 
 df = index[~index['imgangle'].isna()]
-
-exp = 'ARCH2022-05-18'  # 'DYN2020-05-15'  # 'ARCH2021-05-27'
-cache_path = PATH_CACHE + 'cache_{}/'.format(exp)
-if not os.path.isdir(cache_path):
-    os.mkdir(cache_path)
-
-exp_df = df[df['exp'] == exp]
-
-# genotypes = list(exp_df.groupby(['genotype'])['plantid'].nunique().sort_values()[::-1].reset_index()['genotype'])
-
-plantids = [int(p) for p in exp_df['plantid'].unique()]
 
 
 def run_one_plant(plantid):
@@ -102,7 +91,8 @@ def run_one_plant(plantid):
             else:
                 df = pd.read_csv(savefile)
                 print(savefile)
-                if 'hue' not in df.columns:
+                # if 'hue' not in df.columns:
+                if True:
 
                     img_dwn = False
                     try:
@@ -114,6 +104,7 @@ def run_one_plant(plantid):
 
                     if img_dwn:
 
+                        del df['hue']  # TODO remove
                         df = mean_hue_berry(image=img, ellipses=df)
                         df.to_csv(savefile, index=False)
 
@@ -124,17 +115,16 @@ def mp_full_exp(plantids, nb_cpu=11):
 
 # ===============================================================================================================
 
-for plantid in [int(p) for p in exp_df['plantid'].unique()]:
-    run_one_plant(plantid)
 
-for genotype in genotypes:
-    print('genotype', genotype)
-    s = exp_df[exp_df['genotype'] == genotype]
-    for plantid in [int(plantid) for plantid in s['plantid'].unique()]:
-        print('plantid', plantid)
-        run_one_plant(plantid)
+for exp in ['DYN2020-05-15', 'ARCH2021-05-27', 'ARCH2022-05-18']:
 
-#mp_full_exp(plantids, nb_cpu=11)
+    cache_path = PATH_CACHE + 'cache_{}/'.format(exp)
+    if not os.path.isdir(cache_path):
+        os.mkdir(cache_path)
+
+    exp_df = df[df['exp'] == exp]
+    plantids = [int(p) for p in exp_df['plantid'].unique()]
+    mp_full_exp(plantids, 12)
 
 
 

@@ -54,29 +54,12 @@ for plantid in df['plantid'].unique():
         else:
             df.at[s.index, 'imgangle'] = [k * 30 for k in range(12)]
 
-df['grapeid'] = 0
-
 df20 = df.copy()
 
 # ===== PhenoArch 2021 experiment ===================================================================================
 
 df = pd.read_csv('data/copy_from_database/images_grapevine21.csv')
 df_plant = pd.read_csv('data/copy_from_database/plants_grapevine21.csv')
-
-# TODO remove
-# # plantid = np.random.choice(df['plantid'].unique())
-# plantid = 7788
-# selec = df[df['plantid'] == plantid]
-# # task = np.random.choice(selec['taskid'].unique())
-# task = 3741
-# s = selec[selec['taskid'] == task]
-# print(len(s))
-# s = s.sort_values('acquisitiondate')
-# for k, (_, row) in enumerate(s.iloc[:15].iterrows()):
-#     path = 'Z:/{}/{}/{}.png'.format('ARCH2021-05-27', row['taskid'], row['imgguid'])
-#     img = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
-#     plt.figure(k)
-#     plt.imshow(img)
 
 df = df[df['viewtypeid'] == 3]  # xyz camera
 df['exp'] = 'ARCH2021-05-27'
@@ -96,17 +79,21 @@ for plantid in df['plantid'].unique():
     n_imgs = max(set(gb.values), key=list(gb.values).count)  # most frequent number of images / task
     if n_imgs % 12 != 0:  # True for only 1 plant
         df.at[selec.index, 'imgangle'] = None
-        df.at[selec.index, 'grapeid'] = None
     else:
         for task in selec['taskid'].unique():
             s = selec[selec['taskid'] == task].sort_values('acquisitiondate')
-
             if len(s) != n_imgs:
                 df.at[s.index, 'imgangle'] = None
-                df.at[s.index, 'grapeid'] = None
             else:
-                df.at[s.index, 'imgangle'] = [k * 30 for k in range(12)] * int(n_imgs / 12)
-                df.at[s.index, 'grapeid'] = [i for i in range(int(len(s) / 12)) for _ in range(12)]
+                if n_imgs == 12:
+                    df.at[s.index, 'imgangle'] = [int(k * 30) for k in range(12)]
+                elif n_imgs == 24:
+                    df.at[s.index, 'imgangle'] = [0, None, 30, None, 60, None, 90, None, None, 120, 150, None,
+                                                  None, 180, 210, None, 240, None, 270, None, None, 300, None, 330]
+                elif n_imgs == 36:
+                    df.at[s.index, 'imgangle'] = [None, None, 0, None, 30, None, None, 60, None, None, None, 90, None,
+                                                  120, None, None, None, 150, 180, None, None, 210, None, None, 240,
+                                                  None, None, None, None, 270, None, None, 300, None, None, 330]
 
 df21 = df.copy()
 
@@ -129,7 +116,7 @@ df['plantcode'] = [p.replace('MIREILLE', 'V2713/MIREILLE') if len(p.split('/')) 
 df['genotype'] = [n.split('/')[2] for n in df['plantcode']]
 df['scenario'] = [n.split('/')[-3] for n in df['plantcode']]
 
-# TODO : 13% images are lost, could be saved with grapeid
+# TODO : 13% images are lost (i.e. unknown angle), could be saved using grape ids
 for plantid in df['plantid'].unique():
     selec = df[df['plantid'] == plantid]
     #print([len(selec[selec['taskid'] == task]) for task in selec['taskid'].unique()])
@@ -140,8 +127,6 @@ for plantid in df['plantid'].unique():
         else:
             df.at[s.index, 'imgangle'] = [k * 30 for k in range(12)]
 
-df['grapeid'] = 0
-
 df22 = df.copy()
 
 # ===== Combine 2020/2021/2022 PhenoArch experiments =================================================================
@@ -149,28 +134,69 @@ df22 = df.copy()
 df = pd.concat((df20, df21, df22))
 
 df['daydate'] = [d[5:10] for d in df['acquisitiondate']]
+df['plantid'] = [int(p) for p in df['plantid']]
 df['timestamp'] = df.apply(lambda row: date_to_timestamp(row['acquisitiondate']), axis=1)
+del df['viewtypeid']  # index only contains viewtypeid = 3
 
-df.to_csv('data/grapevine/image_index.csv', index=False)
+df.to_csv('data/grapevine/image_index2.csv', index=False)
 
 # ====================================================================================================================
 # ====================================================================================================================
 
-index = pd.read_csv('data/grapevine/image_index.csv')
+index1 = pd.read_csv('data/grapevine/image_index.csv')
+index2 = pd.read_csv('data/grapevine/image_index2.csv')
+
+# ===== remove 'black' col (modulor) ===============================================================================
+
+n = 0
+for exp in ['DYN2020-05-15', 'ARCH2021-05-27', 'ARCH2022-05-18']:
+    fd = '/mnt/data/phenoarch_cache/cache_{}'.format(exp)
+    files = [fd + '/' + id + '/' + f for id in os.listdir(fd) for f in os.listdir(fd + '/' + id)]
+    for f in files:
+        df = pd.read_csv(f)
+        del df['black']
+        df.to_csv(f, index=False)
+        n += 1
+        print(n, exp)
+
+# ===== update cache ===============================================================================================
+
+n = 0
+# for exp in ['DYN2020-05-15', 'ARCH2021-05-27', 'ARCH2022-05-18']:
+exp = 'ARCH2021-05-27'
+fd = 'X:/phenoarch_cache/cache_{}_OLD'.format(exp)
+for id in os.listdir(fd):
+    plantid, grapeid = [int(k) for k in id.split('_')] if '_' in id else (int(id), 0)
+    s1 = index1[(index1['exp'] == exp) & (index1['plantid'] == plantid) & (index1['grapeid'] == grapeid)]
+    s2 = index2[(index2['exp'] == exp) & (index2['plantid'] == plantid)]
+    files = os.listdir(fd + '/' + id)
+    for f in files:
+        task, angle = [int(k) for k in f[:-4].split('_')]
+
+        row1 = s1[(s1['taskid'] == task) & (s1['imgangle'] == angle)].iloc[0]
+        row2 = s2[s2['imgguid'] == row1['imgguid']].iloc[0]
+
+        n += 1
+        if not np.isnan(row2['imgangle']):
+            path1 = fd + '/' + id + '/' + f
+
+            fd2 = 'cache_{}/{}/'.format(exp, plantid)
+            if not os.path.isdir(fd2):
+                os.mkdir(fd2)
+            path2 = fd2 + '{}_{}.csv'.format(task, int(row2['imgangle']))
+            shutil.copyfile(path1, path2)
 
 # ===== verify image_index coherency ===============================================================================
 
-selec = index[index['exp'] == 'ARCH2021-05-27']
+selec = index2[index2['exp'] == 'ARCH2021-05-27']
+selec = selec[~selec['imgangle'].isna()]
 selec = selec[selec['genotype'].isin(['V.vinifera/V6863_H10-PL3', 'V.vinifera/V6860_DO4-PL4'])]
 
-# gb = selec.groupby(['plantid', 'grapeid', 'taskid']).size().reset_index()
-# plantid, grapeid, task = gb.sample().iloc[0][['plantid', 'grapeid', 'taskid']]
-plantid = sorted(selec['plantid'].unique())[6]
-task = sorted(selec['taskid'].unique())[20]
-s = selec[(selec['plantid'] == plantid) & (selec['taskid'] == task)]
-print(len(s))
+plantid = sorted(selec['plantid'].unique())[2]
+s = selec[selec['plantid'] == plantid]
+s = s[s['taskid'] == s['taskid'].unique()[10]]
 s = s.sort_values('timestamp')
-for k, (_, row) in enumerate(s[::2].iterrows()):
+for k, (_, row) in enumerate(s.iterrows()):
     path = 'Z:/{}/{}/{}.png'.format(row['exp'], row['taskid'], row['imgguid'])
     img = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
     plt.figure(k)

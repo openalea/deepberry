@@ -19,7 +19,7 @@ index = pd.read_csv('data/grapevine/image_index.csv')
 PALETTE = np.array(
     [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0], [204, 121, 167], [0, 158, 115],
      [0, 114, 178], [230, 159, 0], [140, 86, 75], [0, 255, 255], [255, 0, 100], [0, 77, 0], [100, 0, 255],
-     [100, 0, 0], [0, 0, 100], [100,100, 0], [0, 100,100], [100, 0, 100], [255, 100, 100]])
+     [100, 0, 0], [0, 0, 100], [100, 100, 0], [0, 100, 100], [100, 0, 100], [255, 100, 100]])
 PALETTE = np.array(20 * list(PALETTE) + [[0, 0, 0]])
 
 # ===================================================================================================================
@@ -28,29 +28,27 @@ df = []
 for exp in index['exp'].unique():
     # exp_path = PATH + exp + '/'
     # exp_path = PATH + 'cache_' + exp + '/'
-    exp_path = 'X:/phenoarch_cache/cache_{}/'.format(exp)
+    exp_path = 'X:/phenoarch_cache/cache_{}'.format(exp)
     s = index[index['exp'] == exp]
     if os.path.isdir(exp_path):
-        for fd in os.listdir(exp_path):
-            plantid, grapeid = fd.split('_') if '_' in fd else (fd, 0)
-            s2 = s[s['plantid'] == int(plantid)]
+        for plantid in [int(p) for p in os.listdir(exp_path)]:
+            s2 = s[s['plantid'] == plantid]
             genotype, scenario = s2[['genotype', 'scenario']].iloc[0]
-            plantid_path = exp_path + fd + '/'
+            plantid_path = '{}/{}/'.format(exp_path, plantid)
             for f in os.listdir(plantid_path):
                 print(plantid_path + f)
                 df_f = pd.read_csv(plantid_path + f)
                 # TODO : info specific to plant = not in this df ? only in index ?
                 task, angle = [int(k) for k in f[:-4].split('_')]
                 timestamp = s2[(s2['taskid'] == task) & (s2['imgangle'] == angle)]['timestamp'].iloc[0]
-                df_f[['exp', 'plantid', 'grapeid', 'task', 'timestamp', 'angle', 'genotype', 'scenario']] = \
-                    exp, int(plantid), int(grapeid), task, timestamp, angle, genotype, scenario
+                df_f[['exp', 'plantid', 'task', 'timestamp', 'angle', 'genotype', 'scenario']] = \
+                    exp, int(plantid), task, timestamp, angle, genotype, scenario
                 df.append(df_f)
 df = pd.concat(df)
 
 df['area'] = (df['ell_w'] / 2) * (df['ell_h'] / 2) * np.pi
 df['volume'] = (4 / 3) * np.pi * ((np.sqrt(df['area'] / np.pi)) ** 3)
-df['roundness'] = df['ell_w'] / df['ell_h']  # always h > w
-# df['black'] = df['black'].astype(int) * 100
+df['roundness'] = df['ell_w'] / df['ell_h']  # always w <= h
 
 # TODO should be in image_index.py
 df = df[~((df['exp'] == 'DYN2020-05-15') & (df['task'] < 2380))]
@@ -74,7 +72,7 @@ df.to_csv(PATH + 'full_results.csv', index=False)
 
 # 'V:/ARCH2022-05-18/5928/dd3debb4-5e13-4430-b83b-dd25c71f0b61.png'
 
-s = df.sample().iloc[0]  # random ellipse
+s = df[df['exp'] == 'ARCH2022-05-18'].sample().iloc[0]  # random ellipse
 
 img_path = get_image_path(index, s['plantid'], s['task'], s['angle'], disk='Z:/')
 img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
@@ -100,6 +98,7 @@ for plantid in df21['plantid'].unique():
         path1 = 'Z:/{}/{}/{}.png'.format(exp, row_img['taskid'], row_img['imgguid'])
         path2 = 'data/grapevine/rgb/{}/{}_{}.png'.format(exp, plantid, grapeid)
         shutil.copyfile(path1, path2)
+
 
 # ===== 2021 =======================================================================================================
 

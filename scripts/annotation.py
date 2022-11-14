@@ -32,6 +32,8 @@ from skimage import io
 
 from deepberry.src.openalea.deepberry.utils import hsv_variation, adjust_contrast_brightness, ellipse_interpolation
 
+from deepberry.src.openalea.deepberry.color import mean_hue_berry
+
 PATH = 'data/grapevine/dataset/'
 
 VALIDATION_IMAGE_SUBSET = ['ARCH2021-05-27_323_3706_180.png',
@@ -110,6 +112,63 @@ df.to_csv(PATH + 'grapevine_annotation.csv', index=False)
 
 plt.hist(df['ell_h'] / df['ell_w'], bins=50)
 plt.hist(np.max((df['box_w'], df['box_h']), axis=0) / np.min((df['box_w'], df['box_h']), axis=0), bins=50)
+
+# ===== add hue in anot df ================================================================
+
+import cv2
+df = pd.read_csv(PATH + 'grapevine_annotation.csv')
+new_df = []
+for image_name in df['image_name'].unique():
+    print(image_name)
+    s = df[df['image_name'] == image_name]
+    img = cv2.cvtColor(cv2.imread(PATH + 'images/{}'.format(image_name)), cv2.COLOR_BGR2RGB)
+    new_s = mean_hue_berry(img, s)
+    new_df.append(new_s)
+new_df = pd.concat(new_df)
+
+# hue = ((180 - np.array(new_df['hue'])) - 100) % 180
+# new_df['hue'] = hue
+
+new_df.to_csv(PATH + 'grapevine_annotation.csv', index=False)
+
+# ===== explore diversity in the dataset ==================================================
+
+df = pd.read_csv(PATH + 'grapevine_annotation.csv')
+df['hue'] = ((180 - np.array(df['hue'])) - 100) % 180
+
+index = pd.read_csv('data/grapevine/image_index.csv')
+
+gb = []
+for name in df['image_name'].unique():
+    exp, plantid, _, _ = name.split('_')
+    plantid = int(plantid)
+    row_index = index[(index['exp'] == exp) & (index['plantid'] == plantid)].iloc[0][['genotype', 'scenario']]
+    genotype, scenario = row_index
+    gb.append([exp, plantid, genotype, scenario, len(df[df['image_name'] == name]), name])
+gb = pd.DataFrame(gb, columns=['exp', 'plantid', 'genotype', 'scenario', 'n', 'name'])
+
+# diversity of genotypes in 2022
+print(gb[gb['exp'].isin(['ARCH2022-05-18'])].groupby(['genotype'])['n'].agg(['sum', 'size'])
+.reset_index().sort_values('sum').to_string())
+
+"""
+train 2020 : 7243 (131)
+train 2021 PL3 : 7764 (107, 3 imgs)
+train 2021 PL4 : 7781 (225, 3 imgs)
+
+2022 : 63 genotypes
+"""
+
+names_valid = gb[((gb['exp'] == 'DYN2020-05-15') & (gb['plantid'] != 7243)) |
+             ((gb['exp'] == 'ARCH2021-05-27') & (~(gb['plantid'].isin([7764, 7781]))))]['name']
+
+s_valid = df[df['image_name'].isin(names_valid)]
+print(len(s_valid), np.sum(s_valid['hue'] < 90) / len(s_valid))
+
+s_train = df[~df['image_name'].isin(names_valid)]
+print(len(s_train), np.sum(s_train['hue'] < 90) / len(s_train))
+
+
 
 # ===== explore nms in the dataset ========================================================
 

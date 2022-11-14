@@ -7,7 +7,7 @@ import time
 from shapely.geometry import Polygon
 from sklearn.metrics import r2_score
 
-from deepberry.src.openalea.deepberry.prediction import detect_berry, segment_berry_scaled, load_models_berry
+from deepberry.src.openalea.deepberry.segmentation import detect_berry, segment_berry_scaled, load_models_berry
 from deepberry.src.openalea.deepberry.utils import ellipse_interpolation
 
 MODEL_DET, MODEL_SEG = load_models_berry('Y:/lepseBinaries/Trained_model/deepberry/')

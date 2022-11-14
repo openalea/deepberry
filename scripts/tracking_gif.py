@@ -10,30 +10,27 @@ from deepberry.src.openalea.deepberry.utils import ellipse_interpolation
 
 index = pd.read_csv('data/grapevine/image_index.csv')
 
-fd = 'data/grapevine/temporal/results/'
-
-res = []
-for file in [f for f in os.listdir(fd) if f[-4:] == '.csv']:
-    print(file)
-    res.append(pd.read_csv(fd + file))
-res = pd.concat(res)
-
-# =================================================================================================================
+# fd = 'data/grapevine/temporal/results/'
 
 exp = 'DYN2020-05-15'
 # exp = 'ARCH2021-05-27'
-res_selec = res[res['exp'] == exp]
 
-n_frames = np.max(res_selec.groupby('plantid')['task'].nunique())
+res = pd.read_csv('X:/phenoarch_cache/cache_{0}/full_results_{0}.csv'.format(exp))
+
+# =================================================================================================================
+
+n_frames = np.max(res.groupby('plantid')['task'].nunique())
 
 # for plantid in res_selec['plantid'].unique():
 
-for plantid in res_selec['plantid'].unique():
+plantid = 7233
 
-    selec0 = res_selec[res_selec['plantid'] == plantid]
+# for plantid in res['plantid'].unique():
 
-    angle = selec0.groupby('angle').size().sort_values().index[-1]
-    # for angle in [k * 30 for k in range(12)]:
+selec0 = res[res['plantid'] == plantid]
+
+# angle = selec0.groupby('angle').size().sort_values().index[-1]
+for angle in selec0['angle'].unique():
 
     selec = selec0[selec0['angle'] == angle]
 
@@ -107,5 +104,5 @@ for plantid in res_selec['plantid'].unique():
     fps = 6
     # img = imgs_gif[0]  # extract first image from iterator
     img = next(imgs_gif)
-    img.save(fp='data/videos/berry_tracking/2020/{}_{}_{}fps.gif'.format(plantid, angle, fps),
+    img.save(fp='data/videos/berry_tracking/7233_multi_angle/{}_{}_{}fps.gif'.format(plantid, angle, fps),
              format='GIF', append_images=imgs_gif, save_all=True, duration=1000/fps, loop=0)

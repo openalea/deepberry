@@ -41,6 +41,54 @@ df21 = df21[df21['genotype'].isin(['V.vinifera/V6863_H10-PL3', 'V.vinifera/V6860
 tasks21 = list(df21.groupby('task')['timestamp'].mean().sort_values().reset_index()['task'])
 df21 = df21[~((df21['plantid'] == 7763) & (df21['task'].isin(tasks21[tasks21.index(3835):])))]
 
+
+# ===== accuracy ====================================================================================================
+
+index = pd.read_csv('data/grapevine/image_index.csv')
+
+df = []
+for exp in ['DYN2020-05-15', 'ARCH2021-05-27']:
+
+    res = pd.read_csv('X:/phenoarch_cache/cache_{0}/full_results_{0}.csv'.format(exp))
+
+    for plantid in res['plantid'].unique():
+        for angle in [k * 30 for k in range(12)]:
+            s = res[(res['plantid'] == plantid) & (res['angle'] == angle)]
+            acc = np.sum(s['berryid'] != -1) / len(s)
+            df.append([exp, plantid, angle, acc])
+df = pd.DataFrame(df, columns=['exp', 'plantid', 'angle', 'acc'])
+
+n = 0
+plt.ylim((-2, 102))
+plt.ylabel('Accuracy (%)')
+for exp in df['exp'].unique():
+    s0 = df[df['exp'] == exp]
+    for plantid in s0['plantid'].unique():
+        s = s0[s0['plantid'] == plantid]
+        plt.plot([n] * len(s), s['acc'] * 100, 'ko')
+        plt.plot([n] * 2, [min(s['acc'] * 100), max(s['acc'] * 100)], 'k-')
+        n += 1
+    n += 5
+
+
+# ===== image frequency ==============================================================================================
+
+plantid = 7232
+s = df20[df20['plantid'] == plantid]
+t = sorted(s.groupby('task')['t'].mean().values)
+
+plt.plot(np.diff(t[::12]), 'ko')
+
+n = []
+dt = []
+df22 = df[df['exp'] == 'ARCH2022-05-18']
+for plantid in df22['plantid'].unique():
+    s = df22[df22['plantid'] == plantid]
+    t = sorted(s.groupby('task')['t'].mean().values)
+    dt += list(np.diff(t))
+    n += [len(t)]
+    print(plantid, len(t), round(np.mean(np.diff(t)), 1), round(np.median(np.diff(t)), 1))
+
 # ====================================================================================================================
 
 def get_rgb_ellipses(ellipses, index, exp, plantid, task, angle, grapeid=0, save=False):

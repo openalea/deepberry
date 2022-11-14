@@ -52,7 +52,7 @@ df['roundness'] = df['ell_w'] / df['ell_h']  # always w <= h
 
 # TODO should be in image_index.py
 df = df[~((df['exp'] == 'DYN2020-05-15') & (df['task'] < 2380))]
-df = df[~((df['exp'] == 'ARCH2021-05-27') & (df['task'].isin([3797, 3798, 3804, 3810, 3811, 3819, 3827, 3829, 3831, 3843, 368])))]
+df = df[~((df['exp'] == 'ARCH2021-05-27') & (df['task'].isin([3797, 3798, 3804, 3810, 3811, 3819, 3827, 3829, 3831, 3843])))]
 df = df[~((df['exp'] == 'ARCH2022-05-18') & (df['task'].isin([5742, 5744, 5876, 5877])))]
 
 tmin_dic = {row['exp']: row['timestamp'] for _, row in df.groupby('exp')['timestamp'].min().reset_index().iterrows()}

@@ -5,10 +5,8 @@ import matplotlib.pyplot as plt
 
 for exp in ['DYN2020-05-15', 'ARCH2021-05-27']:
     res = pd.read_csv('X:/phenoarch_cache/cache_{0}/full_results_{0}.csv'.format(exp))
-    print(sorted(res.groupby('task')['t'].mean()))
     dt = np.diff(sorted(res.groupby('task')['timestamp'].mean())) / 3600
     print(exp, np.mean(dt), np.median(dt))
-
 
 exp = 'DYN2020-05-15'
 # exp = 'ARCH2021-05-27'
@@ -33,7 +31,8 @@ plt.plot(df['dt'], df['acc'], 'k.')
 gb = df.groupby(['plantid', 'period'])[['acc', 'dt']].mean().reset_index()
 for plantid in gb['plantid'].unique():
     s = gb[gb['plantid'] == plantid]
-    plt.plot(s['dt'], s['acc'], '.-', label=plantid)
+    # plt.plot(s['dt'], s['acc'] / s['acc'].iloc[0], '.-', label=plantid)
+    plt.plot(s['dt'], s['acc'] / s['acc'].iloc[0], '.-', label=plantid)
 plt.legend()
 plt.ylabel('Ellipses tracked (%)')
 plt.xlabel('Mean Δt between successive images (h)')

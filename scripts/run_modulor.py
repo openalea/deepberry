@@ -212,7 +212,7 @@ exp = 'ARCH2022-05-18'
 # for period in [2, 3, 6, 9, 12, 15]:
 
     df = []
-    exp_path = '/mnt/data/phenoarch_cache/cache_{}/temporal'.format(exp)
+    exp_path = '/mnt/data/phenoarch_cache/cache_{}/segmentation'.format(exp) # TODO temporal!
     s = index[index['exp'] == exp]
     if os.path.isdir(exp_path):
         for plantid in [int(p) for p in os.listdir(exp_path)]:
@@ -221,18 +221,23 @@ exp = 'ARCH2022-05-18'
             plantid_path = '{}/{}/'.format(exp_path, plantid)
 
             files = [f for f in os.listdir(plantid_path) if '_' in f]
-            for f in [f for f in files if int(f[:-4].split('_')[1]) == period]:
-                angle = int(f.split('_')[0])
+            # for f in [f for f in files if int(f[:-4].split('_')[1]) == period]:
+            for f in files:
+                # angle = int(f.split('_')[0])
+                task, angle = [int(k) for k in f[:-4].split('_')]
 
                 print(plantid_path + f)
                 df_f = pd.read_csv(plantid_path + f)
-                for task in df_f['task'].unique():
-                    df_f_task = df_f[df_f['task'] == task]
-                    task = int(df_f_task.iloc[0]['task'])
-                    timestamp = s2[(s2['taskid'] == task) & (s2['imgangle'] == angle)]['timestamp'].iloc[0]
-                    df_f_task[['exp', 'plantid', 'task', 'timestamp', 'angle', 'genotype', 'scenario']] = \
-                        exp, int(plantid), int(task), timestamp, angle, genotype, scenario
-                    df.append(df_f_task)
+
+                # for task in df_f['task'].unique():
+                #     df_f_task = df_f[df_f['task'] == task]
+                #     task = int(df_f_task.iloc[0]['task'])
+                df_f_task = df_f
+
+                timestamp = s2[(s2['taskid'] == task) & (s2['imgangle'] == angle)]['timestamp'].iloc[0]
+                df_f_task[['exp', 'plantid', 'task', 'timestamp', 'angle', 'genotype', 'scenario']] = \
+                    exp, int(plantid), int(task), timestamp, angle, genotype, scenario
+                df.append(df_f_task)
     df = pd.concat(df)
 
     df['area'] = (df['ell_w'] / 2) * (df['ell_h'] / 2) * np.pi

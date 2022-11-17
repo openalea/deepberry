@@ -18,147 +18,204 @@ from deepberry.src.openalea.deepberry.utils import ellipse_interpolation
 index = pd.read_csv('data/grapevine/image_index.csv')
 
 exp = 'DYN2020-05-15'
-# exp = 'ARCH2021-05-27'
 res = pd.read_csv('X:/phenoarch_cache/cache_{0}/full_results_{0}.csv'.format(exp))
+res['hue_scaled'] = ((180 - np.array(res['hue'])) - 100) % 180
+res = res[res['plantid'] != 7243]
+if exp == 'DYN2020-05-15':
+    res = res[~(res['task'] == 2656)]  # remove task too late
 
-# ===================================================================================================================
+# ===== filtering berries ============================================================================================
 
-df_res = []
+df_berry = []
 
-exp = 'DYN2020-05-15'
+for plantid in res['plantid'].unique():
 
-for plantid in res[res['exp'] == exp]['plantid'].unique():
+    print(plantid)
+    selec = res[(res['plantid'] == plantid) & (res['berryid'] != -1)]
 
-    selec = res[(res['exp'] == exp) & (res['plantid'] == plantid)]
-
-    # remove task too late
-    if exp == 'DYN2020-05-15':
-        selec = selec[~(selec['task'] == 2656)]
-
-    selec['hue'] = ((180 - np.array(selec['hue'])) - 100) % 180
-
-    # ==== filter best berries ===========================================================================================
-
-    window = 15
-
-    df_berry = []
+    median_volume = np.median(selec.groupby(['angle', 'berryid'])['volume'].median())
     n_last = max(1, round(len(selec['task'].unique()) / 15))
+
     for angle in [k * 30 for k in range(12)]:
         s_angle = selec[selec['angle'] == angle]
-        for k in [k for k in s_angle['berryid'].unique() if k != -1]:
+        for k in s_angle['berryid'].unique():
+
+            # one berry trajectory
             s = s_angle[s_angle['berryid'] == k].sort_values('t')
-            v_averaged = uniform_filter1d(s['volume'], size=window, mode='nearest')  # TODO what if dt not constant ?
+            v_averaged = uniform_filter1d(s['volume'], size=15, mode='nearest')  # TODO value tested only for dt=8h
             mape = 100 * np.mean(np.abs((v_averaged - s['volume']) / v_averaged))
-            v_median = np.median(s['volume'])
             if len(s) > 1:
                 v_scaled = (v_averaged - np.min(v_averaged)) / (np.max(v_averaged) - np.min(v_averaged))
                 # TODO generalise more to different t distributions
                 normal_end_volume = np.median(v_scaled[-n_last:]) > 0.3
-                normal_end_hue = np.median(s['hue'][-n_last:]) > 120
-                df_berry.append([angle, k, mape, len(s), v_median, normal_end_volume, normal_end_hue])
+                normal_end_hue = np.median(s['hue_scaled'][-n_last:]) > 120
+                enough_points = len(s) > int(0.90 * len(selec['task'].unique()))
+                not_small = np.median(s['volume']) > 0.2 * median_volume
+                df_berry.append([plantid, angle, k, mape, not_small, enough_points, normal_end_volume, normal_end_hue])
 
-    df_berry = pd.DataFrame(df_berry, columns=['angle', 'id', 'mape', 'n', 'v_median',
-                                               'normal_end_volume', 'normal_end_hue'])
-    df_berry['is_small'] = df_berry['v_median'] < 0.2 * np.median(df_berry['v_median'])
+df_berry = pd.DataFrame(df_berry, columns=['plantid', 'angle', 'id', 'mape', 'not_small',
+                                               'enough_points', 'normal_end_volume', 'normal_end_hue'])
 
-    # filter berries tracked during >90% of the experiment
-    df_berry_selec = df_berry[df_berry['n'] > int(0.90 * len(selec['task'].unique()))]
-    # filter berries with MAPE(V) > 2.5%
-    df_berry_selec = df_berry_selec[df_berry_selec['mape'] < 2.5]
-    # filter berries with no abnormalities
-    df_berry_selec = df_berry_selec[(df_berry_selec['normal_end_volume']) & (df_berry_selec['normal_end_hue'])
-                                    & (~df_berry_selec['is_small'])]
+# filter berries tracked during >90% of the experiment
+df_berry_filter = df_berry[df_berry['enough_points']]
+# filter berries with MAPE(V) > 2.5%
+df_berry_filter = df_berry_filter[df_berry_filter['mape'] < 2.5]
+# filter berries with no abnormalities
+df_berry_filter = df_berry_filter[(df_berry_filter['normal_end_volume']) & (df_berry_filter['normal_end_hue'])
+                                & (df_berry_filter['not_small'])]
 
-    # ===== area = f(t) ==================================================================================================
+# ===== 1 graph, several single berry curves =========================================================================
 
-    #fig, axs = plt.subplots(2, 5)
-    K = 10
+plantid = 7238
 
-    # df_berry_selec = df_berry.sort_values('n', ascending=False).iloc[:(K ** 2)].sort_values('mape')
-    # df_berry_selec = df_berry[(df_berry['n'] > 120) & (df_berry['mape'] < 2.5)]
-    # df_berry_selec = df_berry[df_berry['n'] > 120].sort_values('mape').iloc[(K ** 2):(2 * (K ** 2))]
-    n0 = len(df_berry_selec)
+selec = res[res['plantid'] == plantid]
+df_berry_selec = df_berry_filter[df_berry_filter['plantid'] == plantid]
 
-    plt.figure(plantid)
+
+for var in ['volume', 'hue_scaled']:
+
+    plt.figure()
+    if var == 'volume':
+        plt.title('Berry Volume (V)')
+        plt.ylabel(r'$V / V_{max}$')
+    elif var == 'hue_scaled':
+        plt.title('Berry Hue (H)')
+        plt.ylabel(r'$(H - H_0) / (H_n - H_0)$')
+        plt.ylim((-0.05, 1.03))
+    plt.xlabel('Time (days)')
+
+    xy_list = []
     for i, (_, row) in enumerate(df_berry_selec.iterrows()):
         angle, berryid = row['angle'], row['id']
-
         s = selec[(selec['angle'] == angle) & (selec['berryid'] == berryid)].sort_values('t')
-        x, y = np.array(s['t']), np.array(s['volume'])
-        y_averaged = uniform_filter1d(y, size=15, mode='nearest')
 
-        # # ===== one graph per berry =====================================================================================
-        # mape = 100 * np.mean(np.abs((y_averaged - y) / y_averaged))
-        # ax = plt.subplot(K, K, i + 1)
-        # # col = phm_display.PALETTE[i]/255.
-        # # plt.plot(x, y, '.', color='k')
-        # plt.scatter(x, y, marker='.', c=np.array([cv2.cvtColor(np.uint8([[[h, 255, 140]]]),
-        #                                                        cv2.COLOR_HSV2RGB)[0][0] / 255. for h in s['hue']]))
-        # plt.plot(x, y_averaged, '-', color='r', linewidth=2)
-        # # plt.text(0.03, 0.97, 'q1={}\nq2={}'.format(round(q1, 2), round(q2, 2)),
-        # #          horizontalalignment='left', verticalalignment='top', transform=ax.transAxes)
-        # txt = 'MAPE={}%\na{} id{}'.format(round(mape, 2), int(angle), int(id))
-        # # txt = 'MAPE={}%'.format(round(mape, 2))
-        # plt.text(0.99, 0.03, txt, horizontalalignment='right', verticalalignment='bottom', transform=ax.transAxes)
-        # plt.xlim(0, max(selec['t']) + 2)
+        x, y = np.array(s['t']), np.array(s[var])
 
-        # ===== all berries in the same graph =============================================================================
+        if var == 'volume':
+            y_averaged = uniform_filter1d(y, size=15, mode='nearest')
+            y_scaled = y_averaged / np.max(y_averaged)
+        elif var == 'hue_scaled':
+            y_scaled = (y - np.min(y[:10])) / (np.max(y[-10:]) - np.min(y[:10]))
 
-        # color
-        t, h = np.array(s['t']), np.array(s['hue'])
-        h_scaled = (h - np.median(h[:10])) / (np.median(h[-10:]) - np.median(h[:10]))
-        t_color = {}
-        for q in [0.1, 0.5, 0.9]:
-            k = next(k for k, val in enumerate(h_scaled) if val > q)
-            t_color[q] = t[k - 1] + (t[k] - t[k - 1]) * ((q - h_scaled[k - 1]) / (h_scaled[k] - h_scaled[k - 1]))
+        xy_list.append([s['task'], x, y_scaled])
 
-        x0 = t_color[0.1]  # t0.1
-        y0 = y[np.argmin(np.abs(x0 - x))]  # V(t0.1)
+        plt.plot(x, y_scaled, '-', color='grey', linewidth=0.6, alpha=0.6)
 
-        y_scaled = (y_averaged - np.min(y_averaged)) / (np.max(y_averaged) - np.min(y_averaged))
-        # ymax = np.max(y_averaged)
-        # y_scaled = (y_averaged - y0) / (ymax - y0)
-        # y_scaled = y_averaged / np.max(y_averaged)
-        # x_scaled = x - x0
+    xy = pd.DataFrame(np.concatenate(xy_list, axis=1).T, columns=['task', 'x', 'y'])
 
-        plt.ylabel('(V - Vmin) / (Vmax - Vmin)')
-        plt.xlabel('Time (days)')
-        # plt.plot(x, y_scaled, 'k-', linewidth=0.7, alpha=0.5)
-        x0 = df_res[(df_res['plantid'] == plantid) & (df_res['berryid'] == berryid)].iloc[0]['t_h0.1']
-        print(x0)
-        plt.plot(x - x0, y_scaled, 'k-', linewidth=0.7, alpha=0.5)
-
-        q = 0.5
-        k = next(k for k, val in enumerate(y_scaled) if val > q and k >= np.argmin(y_scaled))
-        t_v05 = x[k - 1] + (x[k] - x[k - 1]) * ((q - y_scaled[k - 1]) / (y_scaled[k] - y_scaled[k - 1]))
-        df_res.append([plantid, row['angle'], row['id'], t_v05] + list(t_color.values()))
+    for metrics, linestyle in zip(['mean', 'median'], ['-', '--']):
+        # mean berry
+        xy_gb = xy.groupby('task').agg(metrics).reset_index().sort_values('x')
+        plt.plot(xy_gb['x'], xy_gb['y'], 'k' + linestyle)
+        # single berry
+        gb = selec.groupby('task')[[var, 't']].agg(metrics).reset_index().sort_values('t')
+        if var == 'volume':
+            mean_scaled = gb[var] / np.max(gb[var])
+        elif var == 'hue_scaled':
+            mean_scaled = (gb[var] - np.min(gb[var])) / (np.max(gb[var]) - np.min(gb[var]))
+        plt.plot(gb['t'], mean_scaled, 'r' + linestyle)
 
 
-        # plt.figure()
-        # plt.plot(x, y_scaled, 'k-', linewidth=1., alpha=1.)
-        # plt.plot(t_v05, 0.5, 'ko', markersize=10)
-        # plt.xlabel('t')
-        # plt.ylabel('(V - Vmin) / (Vmax - Vmin)')
-        # plt.title('Volume (V)')
-        # plt.figure()
-        # plt.plot(t, h_scaled, 'k-', linewidth=1., alpha=1.)
-        # plt.plot(t_color[0.1], 0.1, 'o', color='green', markersize=10)
-        # plt.plot(t_color[0.5], 0.5, 'o', color='darkred', markersize=10)
-        # plt.plot(t_color[0.9], 0.9, 'o', color='darkblue', markersize=10)
-        # plt.xlabel('t')
-        # plt.ylabel('(H - Hmin) / (Hmax - Hmin)')
-        # plt.title('Hue (H)')
+# ====================================================================================================================
 
-        # def cubic_spline(x, y):
-        #     x2 = (x - np.min(x)) / (np.max(x) - np.min(x))
-        #     y2 = (y - np.min(y)) / (np.max(y) - np.min(y))
-        #     tck = interpolate.splrep(x2, y2, s=0.0002*(len(x) - np.sqrt(2 * len(x))))
-        #     y_smooth = interpolate.splev(x2, tck)
-        #     return (y_smooth * (np.max(y) - np.min(y))) + np.min(y)
-        #
-        # plt.plot(x, cubic_spline(x, y_scaled), 'r-')
+for angle in [k * 30 for k in range(12)]:
+    s = selec[selec['angle'] == angle]
+    plt.figure(angle)
+    plt.plot(s['t'], s['hue_scaled'], 'k.')
 
-        # =================================================================================================================
+# ===== area = f(t) ==================================================================================================
+
+df_res = []
+
+#fig, axs = plt.subplots(2, 5)
+
+# K = 10
+# df_berry_selec = df_berry.sort_values('n', ascending=False).iloc[:(K ** 2)].sort_values('mape')
+# df_berry_selec = df_berry[(df_berry['n'] > 120) & (df_berry['mape'] < 2.5)]
+# df_berry_selec = df_berry[df_berry['n'] > 120].sort_values('mape').iloc[(K ** 2):(2 * (K ** 2))]
+n0 = len(df_berry_selec)
+
+plt.figure(plantid)
+for i, (_, row) in enumerate(df_berry_selec.iterrows()):
+    angle, berryid = row['angle'], row['id']
+
+    s = selec[(selec['angle'] == angle) & (selec['berryid'] == berryid)].sort_values('t')
+    x, y = np.array(s['t']), np.array(s['volume'])
+    y_averaged = uniform_filter1d(y, size=15, mode='nearest')
+
+    # # ===== one graph per berry =====================================================================================
+    # mape = 100 * np.mean(np.abs((y_averaged - y) / y_averaged))
+    # ax = plt.subplot(K, K, i + 1)
+    # # col = phm_display.PALETTE[i]/255.
+    # # plt.plot(x, y, '.', color='k')
+    # plt.scatter(x, y, marker='.', c=np.array([cv2.cvtColor(np.uint8([[[h, 255, 140]]]),
+    #                                                        cv2.COLOR_HSV2RGB)[0][0] / 255. for h in s['hue']]))
+    # plt.plot(x, y_averaged, '-', color='r', linewidth=2)
+    # # plt.text(0.03, 0.97, 'q1={}\nq2={}'.format(round(q1, 2), round(q2, 2)),
+    # #          horizontalalignment='left', verticalalignment='top', transform=ax.transAxes)
+    # txt = 'MAPE={}%\na{} id{}'.format(round(mape, 2), int(angle), int(id))
+    # # txt = 'MAPE={}%'.format(round(mape, 2))
+    # plt.text(0.99, 0.03, txt, horizontalalignment='right', verticalalignment='bottom', transform=ax.transAxes)
+    # plt.xlim(0, max(selec['t']) + 2)
+
+    # ===== all berries in the same graph =============================================================================
+
+    # color
+    t, h = np.array(s['t']), np.array(s['hue'])
+    h_scaled = (h - np.median(h[:10])) / (np.median(h[-10:]) - np.median(h[:10]))
+    t_color = {}
+    for q in [0.1, 0.5, 0.9]:
+        k = next(k for k, val in enumerate(h_scaled) if val > q)
+        t_color[q] = t[k - 1] + (t[k] - t[k - 1]) * ((q - h_scaled[k - 1]) / (h_scaled[k] - h_scaled[k - 1]))
+
+    x0 = t_color[0.1]  # t0.1
+    y0 = y[np.argmin(np.abs(x0 - x))]  # V(t0.1)
+
+    y_scaled = y_averaged / np.max(y_averaged)
+    # ymax = np.max(y_averaged)
+    # y_scaled = (y_averaged - y0) / (ymax - y0)
+    # y_scaled = y_averaged / np.max(y_averaged)
+    # x_scaled = x - x0
+
+    plt.ylabel('V / Vmax')
+    plt.xlabel('Time (days)')
+    plt.plot(x, y_scaled, 'k-', linewidth=0.7, alpha=0.5)
+
+    # x0 = df_res[(df_res['plantid'] == plantid) & (df_res['berryid'] == berryid)].iloc[0]['t_h0.1']
+    # print(x0)
+    # plt.plot(x - x0, y_scaled, 'k-', linewidth=0.7, alpha=0.5)
+
+    q = 0.8  # 0.5
+    k = next(k for k, val in enumerate(y_scaled) if val > q and k >= np.argmin(y_scaled))
+    t_v05 = x[k - 1] + (x[k] - x[k - 1]) * ((q - y_scaled[k - 1]) / (y_scaled[k] - y_scaled[k - 1]))
+    df_res.append([plantid, row['angle'], row['id'], t_v05] + list(t_color.values()))
+
+
+    # plt.figure()
+    # plt.plot(x, y_scaled, 'k-', linewidth=1., alpha=1.)
+    # plt.plot(t_v05, 0.5, 'ko', markersize=10)
+    # plt.xlabel('t')
+    # plt.ylabel('(V - Vmin) / (Vmax - Vmin)')
+    # plt.title('Volume (V)')
+    # plt.figure()
+    # plt.plot(t, h_scaled, 'k-', linewidth=1., alpha=1.)
+    # plt.plot(t_color[0.1], 0.1, 'o', color='green', markersize=10)
+    # plt.plot(t_color[0.5], 0.5, 'o', color='darkred', markersize=10)
+    # plt.plot(t_color[0.9], 0.9, 'o', color='darkblue', markersize=10)
+    # plt.xlabel('t')
+    # plt.ylabel('(H - Hmin) / (Hmax - Hmin)')
+    # plt.title('Hue (H)')
+
+    # def cubic_spline(x, y):
+    #     x2 = (x - np.min(x)) / (np.max(x) - np.min(x))
+    #     y2 = (y - np.min(y)) / (np.max(y) - np.min(y))
+    #     tck = interpolate.splrep(x2, y2, s=0.0002*(len(x) - np.sqrt(2 * len(x))))
+    #     y_smooth = interpolate.splev(x2, tck)
+    #     return (y_smooth * (np.max(y) - np.min(y))) + np.min(y)
+    #
+    # plt.plot(x, cubic_spline(x, y_scaled), 'r-')
+
+    # =================================================================================================================
 
 
 df_res = pd.DataFrame(df_res, columns=['plantid', 'angle', 'berryid', 't_v0.5', 't_h0.1', 't_h0.5', 't_h0.9'])

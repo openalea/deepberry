@@ -18,11 +18,15 @@ darknet500 detector train training.data config_1class.cfg -dont_show | tee resul
 
 =====================================================================================================================
 
+# TODO in model_training/README
 HOW TO TRAIN DEEBBERRY MODELS:
 - create a folder with the following 4 subfolders : image_train, image_valid, label_train, label_valid. The path of the
 main folder must be indicated in the PATH variable below. image_train / image_valid must contain RGB images of
 grapevine. label_train / label_valid must contain annotation .json files with the same name as their corresponding
 image. Each annotation file needs to have the same format as the .json files from the annotation tool Labelme.
+-run this script (1- generate annot df, 2- generate yolo dataset, 3- generate unet dataset)
+- zip yolo dataset, put in on google drive, also put the .cfg file on drive, run the colab script for detection
+- zip unet dataset, put in on colab, run the colab script for segmentation
 """
 
 import json
@@ -39,7 +43,14 @@ from deepberry.src.openalea.deepberry.color import mean_hue_berry
 
 PATH = 'data/grapevine/dataset/'
 
-# ===== 1) generating the annotation dataframe =======================================================================
+# TODO remove
+fd = 'data/grapevine/dataset/dataset_yolo/train/'
+for f in os.listdir(fd):
+    if int(f[3:].split('.')[0]) > 15000:
+        os.remove(fd + f)
+
+
+# ===== 1) merge all berry annotations in an easy-to-use dataframe ===================================================
 
 df = []
 for dataset in ['train', 'valid']:
@@ -59,27 +70,23 @@ for dataset in ['train', 'valid']:
 
         for shape in anot['shapes']:
 
-            x_anot = np.array(shape['points'])[:, 0].reshape([-1, 1])
-            y_anot = np.array(shape['points'])[:, 1].reshape([-1, 1])
+            # extract x,y annotated around a berry
+            points = np.array(shape['points']).reshape((-1, 1, 2)).astype(int)  # reshaping & int
 
             # fit ellipse equation (5 parameters) to the annotated x,y points with opencv
-            points = np.hstack((x_anot, y_anot))
-            points = np.array([[p] for p in points]).astype(int)  # reshape & int
-            #points = cv2.convexHull(points)
             (ell_x, ell_y), (ell_w, ell_h), ell_a = cv2.fitEllipse(points)
 
             # a) n points of the rotated ellipse
             lsp_x, lsp_y = ellipse_interpolation(x=ell_x, y=ell_y, w=ell_w, h=ell_h, a=ell_a, n_points=100)
-            # b) box coordinates (x,y = box center)
-            xmin, xmax, ymin, ymax = np.min(lsp_x), np.max(lsp_x), np.min(lsp_y), np.max(lsp_y)
-            box_x, box_y, box_w, box_h = ell_x, ell_y, xmax - xmin, ymax - ymin
+            # b) deduce box coordinates (x,y = box center)
+            box_x, box_y, box_w, box_h = ell_x, ell_y, max(lsp_x) - min(lsp_x), max(lsp_y) - min(lsp_y)
 
             # plt.plot(list(x_anot) + [x_anot[0]], list(y_anot) + [y_anot[0]], 'ro-')
             # plt.plot(lsp_x, lsp_y, 'blue')
             # plt.plot([xmin, xmin, xmax, xmax, xmin], [ymin, ymax, ymax, ymin, ymin], 'r-')
 
-            df.append([ell_x, ell_y, ell_w, ell_h, ell_a, box_x, box_y, box_w, box_h,
-                       file.replace('.json', '.png'), dataset])
+            image_name = file.replace('.json', '.png')
+            df.append([ell_x, ell_y, ell_w, ell_h, ell_a, box_x, box_y, box_w, box_h, image_name, dataset])
 
 df = pd.DataFrame(df, columns=['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a', 'box_x', 'box_y', 'box_w', 'box_h',
                                'image_name', 'dataset'])
@@ -94,103 +101,102 @@ H_img, W_img = 2448, 2048  # image size
 H_vig, W_vig = 416, 416  # vignette size
 
 dir = PATH + 'dataset_yolo'
-
-dataset = 'train'  # train or valid
-
 if not os.path.isdir(dir):
     os.mkdir(dir)
-saving_path = dir + '/' + dataset
-if not os.path.isdir(saving_path):
-    os.mkdir(saving_path)
 
-anot = df[df['dataset'] == 'train']
-anot['reps'] = 0
+for dataset, n_vignettes_total in zip(['train', 'valid'], [15000, 1500]):
 
-# remove berries with ellipse going out from image (should not happen, or very rare)
-indexes = []
-for i, row in anot.iterrows():
-    x, y, w, h = row['box_x'], row['box_y'], row['box_w'], row['box_h']
-    if not (0 + w / 2 < x < W_img - w / 2 and 0 + h / 2 < y < H_img - h / 2):
-        indexes.append(row.name)
-anot = anot.drop(indexes)
+    saving_path = dir + '/' + dataset
+    if not os.path.isdir(saving_path):
+        os.mkdir(saving_path)
 
-# remove warning for df.loc[...] = value (default='warn')
-pd.options.mode.chained_assignment = None
+    anot = df[df['dataset'] == dataset]
+    anot['reps'] = 0
 
-# load images
-names = anot['image_name'].unique()
-images = {n: cv2.cvtColor(cv2.imread(PATH + 'image_{}/'.format(dataset) + n), cv2.COLOR_BGR2RGB) for n in names}
+    # remove berries with ellipse going out from image (should not happen, or very rare)
+    indexes = []
+    for i, row in anot.iterrows():
+        x, y, w, h = row['box_x'], row['box_y'], row['box_w'], row['box_h']
+        if not (0 + w / 2 < x < W_img - w / 2 and 0 + h / 2 < y < H_img - h / 2):
+            indexes.append(row.name)
+    anot = anot.drop(indexes)
 
-for k_image in range(20000):  # 7973
+    # remove warning for df.loc[...] = value (default='warn')
+    pd.options.mode.chained_assignment = None
 
-    berry_selec = anot.sort_values('reps').iloc[0]
-    print(k_image, len(anot[anot['reps'] == 0]), min(anot['reps']), round(np.mean(anot['reps']), 2), np.median(anot['reps']), max(anot['reps']))
+    # load images
+    names = anot['image_name'].unique()
+    images = {n: cv2.cvtColor(cv2.imread(PATH + 'image_{}/'.format(dataset) + n), cv2.COLOR_BGR2RGB) for n in names}
 
-    image = images[berry_selec['image_name']]
+    for k_image in range(n_vignettes_total):
 
-    image = hsv_variation(image, variation=[20, 20, 20])
-    contrast = np.random.choice([np.random.uniform(0.7, 1), np.random.uniform(1, 1.5)])
-    image = adjust_contrast_brightness(image, contrast=contrast)
+        berry_selec = anot.sort_values('reps').iloc[0]
+        print(k_image, len(anot[anot['reps'] == 0]), min(anot['reps']),
+              round(np.mean(anot['reps']), 2), np.median(anot['reps']), max(anot['reps']))
 
-    # center of the vignette
-    if np.random.random() < 0.10:
-        wi = np.random.randint(W_vig / 2, image.shape[1] - W_vig / 2)
-        hi = np.random.randint(H_vig / 2, image.shape[0] - H_vig / 2)
-    else:
-        # wi = int(min(max(np.random.randint(xmin, xmax), W / 2), image.shape[1] - W / 2))
-        # hi = int(min(max(np.random.randint(ymin, ymax), H / 2), image.shape[0] - H / 2))
-        xmin, xmax = berry_selec['box_x'] - 200, berry_selec['box_x'] + 200
-        ymin, ymax = berry_selec['box_y'] - 200, berry_selec['box_y'] + 200
-        wi = int(min(max(np.random.randint(xmin, xmax), W_vig / 2), image.shape[1] - W_vig / 2))
-        hi = int(min(max(np.random.randint(ymin, ymax), H_vig / 2), image.shape[0] - H_vig / 2))
+        image = images[berry_selec['image_name']]
 
-    # crop a vignette around the chosen point
-    ha, hb = hi - int(H_vig / 2), hi + int(H_vig / 2)
-    wa, wb = wi - int(W_vig / 2), wi + int(W_vig / 2)
-    vignette = image[ha:hb, wa:wb]
+        # center of the vignette
+        if np.random.random() < 0.10:
+            wi = np.random.randint(W_vig / 2, image.shape[1] - W_vig / 2)
+            hi = np.random.randint(H_vig / 2, image.shape[0] - H_vig / 2)
+        else:
+            xmin, xmax = berry_selec['box_x'] - 200, berry_selec['box_x'] + 200
+            ymin, ymax = berry_selec['box_y'] - 200, berry_selec['box_y'] + 200
+            wi = int(min(max(np.random.randint(xmin, xmax), W_vig / 2), image.shape[1] - (W_vig / 2)))
+            hi = int(min(max(np.random.randint(ymin, ymax), H_vig / 2), image.shape[0] - (H_vig / 2)))
 
-    # random data augmentation flip among 8 possibilities
-    # (It's not clear if it's already implemented in Yolov4...)
-    aug = {'horizontal_flip': np.random.choice([True, False]),
-           'vertical_flip': np.random.choice([True, False]),
-           '90_flip': np.random.choice([True, False])}
+        # crop a vignette around the chosen point
+        ha, hb = hi - int(H_vig / 2), hi + int(H_vig / 2)
+        wa, wb = wi - int(W_vig / 2), wi + int(W_vig / 2)
+        vignette = image[ha:hb, wa:wb]
 
-    # apply the image flip
-    if aug['horizontal_flip']:
-        vignette = cv2.flip(vignette, 1)
-    if aug['vertical_flip']:
-        vignette = cv2.flip(vignette, 0)
-    if aug['90_flip']:
-        vignette = cv2.rotate(vignette, cv2.ROTATE_90_CLOCKWISE)
+        # image augmentation
+        vignette = hsv_variation(vignette, variation=[20, 20, 20])
+        contrast = np.random.choice([np.random.uniform(0.7, 1), np.random.uniform(1, 1.5)])
+        vignette = adjust_contrast_brightness(vignette, contrast=contrast)
 
-    # create and save the annotation .txt file, with the format needed to train Yolov4
-    with open(saving_path + '/img{}.txt'.format(k_image), 'w') as out:
-        for _, row in anot[anot['image_name'] == berry_selec['image_name']].iterrows():
-            x, y, w, h = row['box_x'], row['box_y'], row['box_w'], row['box_h']
-            # check if box is // 100% INCLUDED // in the vignette space
-            if wa + w/2 < x < wb - w/2 and ha + h/2 < y < hb - h/2:
-                x_center, y_center = (x - wa) / W_vig, (y - ha) / H_vig
-                width, height = w / W_vig, h / H_vig
+        # random data augmentation flip among 8 possibilities
+        # (It's not clear if it's already implemented in Yolov4...)
+        aug = {'horizontal_flip': np.random.choice([True, False]),
+               'vertical_flip': np.random.choice([True, False]),
+               '90_flip': np.random.choice([True, False])}
 
-                # count berry occurence
-                anot.loc[row.name, 'reps'] += 1
+        # apply the image flip
+        if aug['horizontal_flip']:
+            vignette = cv2.flip(vignette, 1)
+        if aug['vertical_flip']:
+            vignette = cv2.flip(vignette, 0)
+        if aug['90_flip']:
+            vignette = cv2.rotate(vignette, cv2.ROTATE_90_CLOCKWISE)
 
-                # if image was flipped, annotation has to be flipped too
-                if aug['horizontal_flip']:
-                    x_center = 1 - x_center
-                if aug['vertical_flip']:
-                    y_center = 1 - y_center
-                if aug['90_flip']:
-                    x_center, y_center = 1 - y_center, x_center
-                    width, height = height, width
+        # create and save the annotation .txt file, with the format needed to train Yolov4
+        with open(saving_path + '/img{}.txt'.format(k_image), 'w') as out:
+            for _, row in anot[anot['image_name'] == berry_selec['image_name']].iterrows():
+                x, y, w, h = row['box_x'], row['box_y'], row['box_w'], row['box_h']
+                # check if box is // 100% INCLUDED // in the vignette space
+                if wa + w/2 < x < wb - w/2 and ha + h/2 < y < hb - h/2:
+                    x_center, y_center = (x - wa) / W_vig, (y - ha) / H_vig
+                    width, height = w / W_vig, h / H_vig
 
-                box_class = 0  # default, because only one class
-                out.write('{} {} {} {} {}\n'.format(box_class, x_center, y_center, width, height))
+                    # count berry occurence
+                    anot.loc[row.name, 'reps'] += 1
 
-    # save vignette
-    io.imsave(saving_path + '/img{}.png'.format(k_image), vignette.astype(np.uint8))
-    k_image += 1
+                    # if image was flipped, annotation has to be flipped too
+                    if aug['horizontal_flip']:
+                        x_center = 1 - x_center
+                    if aug['vertical_flip']:
+                        y_center = 1 - y_center
+                    if aug['90_flip']:
+                        x_center, y_center = 1 - y_center, x_center
+                        width, height = height, width
 
+                    box_class = 0  # default, because only one class
+                    out.write('{} {} {} {} {}\n'.format(box_class, x_center, y_center, width, height))
+
+        # save vignette
+        io.imsave(saving_path + '/img{}.png'.format(k_image), vignette.astype(np.uint8))
+        k_image += 1
 
 # ===== add hue in anot df ================================================================
 # TODO in paper/valid_seg (effect of color)

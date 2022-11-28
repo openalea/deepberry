@@ -116,12 +116,56 @@ for var in ['volume', 'hue_scaled']:
         plt.plot(gb['t'], mean_scaled, 'r' + linestyle)
 
 
-# ====================================================================================================================
+# ===== effect of dt on t(H=0.1) =====================================================================================
 
-for angle in [k * 30 for k in range(12)]:
-    s = selec[selec['angle'] == angle]
-    plt.figure(angle)
-    plt.plot(s['t'], s['hue_scaled'], 'k.')
+# ===== example for one berry
+
+plantid = 7232
+selec = res[res['plantid'] == plantid]
+df_berry_selec = df_berry_filter[df_berry_filter['plantid'] == plantid]
+
+df = []
+# angle, berryid = df_berry_selec.iloc[1][['angle', 'id']]
+for k_berry, (_, row) in enumerate(df_berry_selec.iterrows()):
+    angle, berryid = row[['angle', 'id']]
+
+    # plt.figure()
+    periods = [1, 3, 6, 9, 12]
+    for k, period in enumerate(periods):
+        s = selec[(selec['angle'] == angle) & (selec['berryid'] == berryid)].sort_values('t')
+        s = s[::period]
+        x = np.array(s['t'])
+        y = np.array(s['hue_scaled'])
+        y_scaled = (y - np.median(y[:3])) / (np.median(y[-3:]) - np.median(y[:3]))
+
+        # ax = plt.subplot(len(periods), 1, k + 1)
+        # plt.xlim((min(selec['t']) - 2, max(selec['t']) + 2))
+        # plt.plot(x, y_scaled, 'k.-')
+
+        q = 0.1  # 0.5
+        k = next(k for k, val in enumerate(y_scaled) if val > q and k >= np.argmin(y_scaled))
+        t_01 = x[k - 1] + (x[k] - x[k - 1]) * ((q - y_scaled[k - 1]) / (y_scaled[k] - y_scaled[k - 1]))
+
+        # plt.plot(t_01, 0.1, 'go')
+        # plt.text(0.9, 0.1, 't(H=0.1)={}d'.format(round(t_01, 1)), ha='right', va='bottom', transform=ax.transAxes, color='green')
+        df.append([k_berry, period, t_01])
+
+df = pd.DataFrame(df, columns=['berry', 'period', 't01'])
+
+boxplots = {k * 8: [] for k in [3, 6, 9, 12]}
+for berry in df['berry'].unique():
+    row1 = df[(df['berry'] == berry) & (df['period'] == 1)].iloc[0]
+    for period in [3, 6, 9, 12]:
+        row2 = df[(df['berry'] == berry) & (df['period'] == period)].iloc[0]
+        boxplots[period * 8].append(row2['t01'] - row1['t01'])
+
+data = pd.DataFrame({"Box1": np.random.rand(10), "Box2": np.random.rand(10)})
+
+# Plot the dataframe
+pd.DataFrame(boxplots).plot(kind='box', title='')
+plt.ylabel('Difference with the reference value (Δt=8h)')
+plt.xlabel('Δt (h)')
+
 
 # ===== area = f(t) ==================================================================================================
 

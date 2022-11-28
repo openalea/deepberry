@@ -21,23 +21,79 @@ import time
 
 from multiprocessing import Pool
 
-from deepberry.src.openalea.deepberry.segmentation import detect_berry, segment_berry_scaled, \
-    load_models_berry
+from deepberry.src.openalea.deepberry.segmentation import detect_berry, segment_berry, load_models_berry
 from deepberry.src.openalea.deepberry.color import mean_hue_berry
 from deepberry.src.openalea.deepberry.temporal import distance_matrix, points_sets_alignment
 
 # disable multi CPU in opencv2. necessary to run deep-learning (opencv2) and multi-processing at the same time
 #cv2.setNumThreads(0)
 
-PATH_DATA = '/home/daviet/deepberry_data/'
-PATH_CACHE = '/mnt/data/phenoarch_cache/'
-PATH_MODEL = '/mnt/phenomixNasShare/lepseBinaries/Trained_model/deepberry/'
+DIR_INDEX = '/home/daviet/deepberry_data/'
+DIR_CACHE = '/mnt/data/phenoarch_cache/'
+DIR_MODEL = '/mnt/phenomixNasShare/lepseBinaries/Trained_model/deepberry/new/'
 
-MODEL_DET, MODEL_SEG = load_models_berry(PATH_MODEL)
+MODEL_DET, MODEL_SEG = load_models_berry(DIR_MODEL)
 
-index = pd.read_csv(PATH_DATA + 'image_index.csv')
+index = pd.read_csv(DIR_INDEX + 'image_index.csv')
+index = index[~index['imgangle'].isna()]
 
-df = index[~index['imgangle'].isna()]
+# ===== non-temporal ==============================================================================================
+
+
+def run_segmentation(plantid):
+
+    plantid_path = DIR_CACHE + 'segmentation/{}/'.format(plantid)
+    if not os.path.isdir(plantid_path):
+        os.mkdir(plantid_path)
+    for _, row in s.iterrows():
+
+        savefile = plantid_path + '{}_{}.csv'.format(int(row['taskid']), int(row['imgangle']))
+        img_path = '/mnt/phenomixNas/{}/{}/{}.png'.format(row['exp'], int(row['taskid']), row['imgguid'])
+
+        # if not os.path.isfile(savefile):
+        #
+        #     img_dwn = False
+        #     try:
+        #         img = cv2.imread(img_path)
+        #         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        #         img_dwn = True
+        #     except:
+        #         print('bug', img_path)
+        #
+        #     if img_dwn:
+        #
+        #         t0 = time.time()
+        #         res_det = detect_berry(image=img, model=MODEL_DET)
+        #         t1 = time.time()
+        #         res_seg = segment_berry_scaled(image=img, model=MODEL_SEG, boxes=res_det)
+        #         t2 = time.time()
+        #         res_classif = classify_berry(image=img, ellipses=res_seg)
+        #         t3 = time.time()
+        #
+        #         print('{} | det: {:.1f}s, seg: {:.1f}s, classif: {:.1f}s (n={}, black={}%)'.format(plantid,
+        #             t1 - t0, t2 - t1, t3 - t2, len(res_classif), round(100*np.sum(res_classif['black'])/len(res_classif), 1)))
+        #
+        #         res_classif.to_csv(savefile, index=False)
+
+        if not os.path.isfile(savefile):
+            print('================= no file =======================')
+        else:
+            df = pd.read_csv(savefile)
+            print(savefile)
+            # if 'hue' not in df.columns:
+            if True:
+
+                img_dwn = False
+                try:
+                    img = cv2.imread(img_path)
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    img_dwn = True
+                except:
+                    print('bug', img_path)
+
+                if img_dwn:
+                    df = mean_hue_berry(image=img, ellipses=df)
+                    df.to_csv(savefile, index=False)
 
 
 def run_one_plant(plantid_angle_period):
@@ -51,7 +107,7 @@ def run_one_plant(plantid_angle_period):
 
     exp = exp_df.iloc[0]['exp']
 
-    plantid_t_path = PATH_CACHE + 'cache_{}/temporal/{}/'.format(exp, plantid)
+    plantid_t_path = DIR_CACHE + 'cache_{}/temporal/{}/'.format(exp, plantid)
     if not os.path.isdir(plantid_t_path):
         os.mkdir(plantid_t_path)
 
@@ -67,12 +123,12 @@ def run_one_plant(plantid_angle_period):
         tasks = [t for t in tasks if t not in [5742, 5744, 5876, 5877]]
 
     # quarantine_plantid (temporal)
-    quarantine_t = pd.read_csv(PATH_CACHE + 'cache_{0}/quarantine_temporal_{0}.csv'.format(exp))
+    quarantine_t = pd.read_csv(DIR_CACHE + 'cache_{0}/quarantine_temporal_{0}.csv'.format(exp))
     tasks = [t for t in tasks if t not in list(quarantine_t[quarantine_t['plantid'] == plantid]['task'])]
 
     tasks = tasks[::time_period]
 
-    seg_folder = PATH_CACHE + 'cache_{}/segmentation/{}/'.format(exp, plantid)
+    seg_folder = DIR_CACHE + 'cache_{}/segmentation/{}/'.format(exp, plantid)
 
     # for angle in [k * 30 for k in range(12)]:
 
@@ -103,7 +159,7 @@ def run_one_plant(plantid_angle_period):
             if timestamp > t_camera:
                 points_sets[i_task] += np.array([-4.2, -437.8])
 
-    matrix_path = PATH_CACHE + 'cache_{}/distance_matrix/{}_{}_{}.npy'.format(exp, plantid, angle, time_period)
+    matrix_path = DIR_CACHE + 'cache_{}/distance_matrix/{}_{}_{}.npy'.format(exp, plantid, angle, time_period)
     if not os.path.isfile(matrix_path):
         print('computing distance matrix...')
         M = distance_matrix(points_sets)
@@ -120,61 +176,6 @@ def run_one_plant(plantid_angle_period):
 
     final_res.to_csv(plantid_t_path + '{}_{}.csv'.format(angle, time_period), index=False)
 
-    # ===== non-temporal ==============================================================================================
-
-    # plantid_path = cache_path + 'segmentation/{}/'.format(plantid)
-    # if not os.path.isdir(plantid_path):
-    #     os.mkdir(plantid_path)
-    # for _, row in s.iterrows():
-    #
-    #     savefile = plantid_path + '{}_{}.csv'.format(int(row['taskid']), int(row['imgangle']))
-    #     img_path = '/mnt/phenomixNas/{}/{}/{}.png'.format(row['exp'], int(row['taskid']), row['imgguid'])
-    #
-    #     # if not os.path.isfile(savefile):
-    #     #
-    #     #     img_dwn = False
-    #     #     try:
-    #     #         img = cv2.imread(img_path)
-    #     #         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    #     #         img_dwn = True
-    #     #     except:
-    #     #         print('bug', img_path)
-    #     #
-    #     #     if img_dwn:
-    #     #
-    #     #         t0 = time.time()
-    #     #         res_det = detect_berry(image=img, model=MODEL_DET)
-    #     #         t1 = time.time()
-    #     #         res_seg, _ = segment_berry_scaled(image=img, model=MODEL_SEG, boxes=res_det)
-    #     #         t2 = time.time()
-    #     #         res_classif = classify_berry(image=img, ellipses=res_seg)
-    #     #         t3 = time.time()
-    #     #
-    #     #         print('{} | det: {:.1f}s, seg: {:.1f}s, classif: {:.1f}s (n={}, black={}%)'.format(plantid,
-    #     #             t1 - t0, t2 - t1, t3 - t2, len(res_classif), round(100*np.sum(res_classif['black'])/len(res_classif), 1)))
-    #     #
-    #     #         res_classif.to_csv(savefile, index=False)
-    #
-    #     if not os.path.isfile(savefile):
-    #         print('================= no file =======================')
-    #     else:
-    #         df = pd.read_csv(savefile)
-    #         print(savefile)
-    #         # if 'hue' not in df.columns:
-    #         if True:
-    #
-    #             img_dwn = False
-    #             try:
-    #                 img = cv2.imread(img_path)
-    #                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    #                 img_dwn = True
-    #             except:
-    #                 print('bug', img_path)
-    #
-    #             if img_dwn:
-    #
-    #                 df = mean_hue_berry(image=img, ellipses=df)
-    #                 df.to_csv(savefile, index=False)
 
 
 def mp_full_exp(plantids, nb_cpu=11):

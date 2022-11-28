@@ -32,7 +32,6 @@ tasks20 = list(df20.groupby('task')['timestamp'].mean().sort_values().reset_inde
 df20 = df20[~((df20['plantid'] == 7232) & (df20['task'].isin(tasks20[:tasks20.index(2385)])))]
 df20 = df20[~((df20['plantid'] == 7235) & (df20['task'].isin(tasks20[tasks20.index(2613):])))]
 df20 = df20[~((df20['plantid'] == 7238) & (df20['task'].isin(tasks20[:tasks20.index(2387)])))]
-
 t = tasks20[:tasks20.index(2385)] + tasks20[tasks20.index(2613):] + tasks20[:tasks20.index(2387)]
 
 # 2021
@@ -40,36 +39,6 @@ df21 = df[df['exp'] == 'ARCH2021-05-27']
 df21 = df21[df21['genotype'].isin(['V.vinifera/V6863_H10-PL3', 'V.vinifera/V6860_DO4-PL4'])]
 tasks21 = list(df21.groupby('task')['timestamp'].mean().sort_values().reset_index()['task'])
 df21 = df21[~((df21['plantid'] == 7763) & (df21['task'].isin(tasks21[tasks21.index(3835):])))]
-
-
-# ===== accuracy ====================================================================================================
-
-index = pd.read_csv('data/grapevine/image_index.csv')
-
-df = []
-for exp in ['DYN2020-05-15', 'ARCH2021-05-27']:
-
-    res = pd.read_csv('X:/phenoarch_cache/cache_{0}/full_results_{0}.csv'.format(exp))
-
-    for plantid in res['plantid'].unique():
-        for angle in [k * 30 for k in range(12)]:
-            s = res[(res['plantid'] == plantid) & (res['angle'] == angle)]
-            acc = np.sum(s['berryid'] != -1) / len(s)
-            df.append([exp, plantid, angle, acc])
-df = pd.DataFrame(df, columns=['exp', 'plantid', 'angle', 'acc'])
-
-n = 0
-plt.ylim((-2, 102))
-plt.ylabel('Accuracy (%)')
-for exp in df['exp'].unique():
-    s0 = df[df['exp'] == exp]
-    for plantid in s0['plantid'].unique():
-        s = s0[s0['plantid'] == plantid]
-        plt.plot([n] * len(s), s['acc'] * 100, 'ko')
-        plt.plot([n] * 2, [min(s['acc'] * 100), max(s['acc'] * 100)], 'k-')
-        n += 1
-    n += 5
-
 
 # ===== image frequency ==============================================================================================
 

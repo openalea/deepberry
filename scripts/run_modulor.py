@@ -44,7 +44,7 @@ selec = index[(index['exp'] == 'DYN2020-05-15') |
 
 # ===== non-temporal ==============================================================================================
 
-for _, row in selec.iterrows():
+for _, row in selec.sample(50).iterrows():
 
     plantid_path = DIR_CACHE + 'cache_{}/segmentation/{}/'.format(row['exp'], row['plantid'])
     if not os.path.isdir(plantid_path):
@@ -65,7 +65,7 @@ for _, row in selec.iterrows():
         if img_dwn:
 
             t0 = time.time()
-            res_det = berry_detection(image=img, model=MODEL_DET)
+            res_det = berry_detection(image=img, model=MODEL_DET, score_threshold=0.985)
             t1 = time.time()
             res_seg = berry_segmentation(image=img, model=MODEL_SEG, boxes=res_det)
             t2 = time.time()

@@ -12,11 +12,12 @@ VIGNETTE_SIZE_SEG = 128
 BERRY_SCALING_SEG = 0.75
 
 
-def berry_detection(image, model, max_box_size=150, score_threshold=0.95, ratio_threshold=2.5, nms_threshold=0.7):
+def berry_detection(image, model, max_box_size=150, score_threshold=0.985, ratio_threshold=2.5, nms_threshold=0.7):
     """
     max_box_size : maximum box height or width in the dataset
     nms_threshold : nms is never higher than 0.7 in the ground-truth annotated dataset
     ratio_threshold: in ground-truth dataset; 0.5% of values > 2., 0.03% > 2.5
+    score_threshold: it probably needs to be re-evaluated if using a new model
     """
 
     px_spacing = VIGNETTE_SIZE_DET - max_box_size
@@ -54,8 +55,8 @@ def berry_segmentation(image, model, boxes):
         x_vignette, y_vignette = round(x + (w / 2)), round(y + (h / 2))
         zoom = (VIGNETTE_SIZE_SEG * BERRY_SCALING_SEG) / np.max((w, h))
 
-        ya, yb = round(y_vignette - (ds / zoom)), round(y_vignette + (ds / zoom))
-        xa, xb = round(x_vignette - (ds / zoom)), round(x_vignette + (ds / zoom))
+        ya, yb = int(round(y_vignette - (ds / zoom))), int(round(y_vignette + (ds / zoom)))
+        xa, xb = int(round(x_vignette - (ds / zoom))), int(round(x_vignette + (ds / zoom)))
 
         # check if enough space to unzoom in case of big berry
         enough_space = (0 <= ya) and (yb < image.shape[0]) and (0 <= xa) and (xb <= image.shape[1])

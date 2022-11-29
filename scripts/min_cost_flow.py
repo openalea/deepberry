@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 import networkx as nx
 
-from deepberry.src.openalea.deepberry.segmentation import ellipse_interpolation
+from deepberry.src.openalea.deepberry.detection_and_segmentation import ellipse_interpolation
 
 PALETTE = np.array(
     [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0], [204, 121, 167], [0, 158, 115],

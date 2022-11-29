@@ -21,8 +21,8 @@ import time
 
 from multiprocessing import Pool
 
-from deepberry.src.openalea.deepberry.segmentation import berry_detection, berry_segmentation, load_berry_models
-from deepberry.src.openalea.deepberry.color import berry_features_extraction
+from deepberry.src.openalea.deepberry.detection_and_segmentation import berry_detection, berry_segmentation, load_berry_models
+from deepberry.src.openalea.deepberry.features_extraction import berry_features_extraction
 from deepberry.src.openalea.deepberry.temporal import distance_matrix, points_sets_alignment
 
 # disable multi CPU in opencv2. necessary to run deep-learning (opencv2) and multi-processing at the same time
@@ -72,7 +72,7 @@ for _, row in selec.sample(50).iterrows():
             res = berry_features_extraction(image=img, ellipses=res_seg)
             t3 = time.time()
 
-            print('{} | det: {:.1f}s, seg: {:.1f}s, classif: {:.1f}s (n={})'.format(
+            print('{} | det: {:.1f}s, seg: {:.1f}s, features: {:.1f}s (n={})'.format(
                 row['plantid'], t1 - t0, t2 - t1, t3 - t2, len(res)))
 
             res.to_csv(filename, index=False)

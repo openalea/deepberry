@@ -45,9 +45,9 @@ import os
 import pandas as pd
 from skimage import io
 
-from deepberry.src.openalea.deepberry.segmentation import VIGNETTE_SIZE_DET, VIGNETTE_SIZE_SEG, BERRY_SCALING_SEG
+from deepberry.src.openalea.deepberry.detection_and_segmentation import VIGNETTE_SIZE_DET, VIGNETTE_SIZE_SEG, BERRY_SCALING_SEG
 from deepberry.src.openalea.deepberry.utils import hsv_variation, adjust_contrast_brightness, ellipse_interpolation
-from deepberry.src.openalea.deepberry.color import berry_features_extraction
+from deepberry.src.openalea.deepberry.features_extraction import berry_features_extraction
 
 # dir containing the following folders: image_train, image_valid, label_train, label_valid
 DIR_DATASET = 'data/grapevine/dataset/'

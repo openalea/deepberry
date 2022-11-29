@@ -6,7 +6,7 @@ from shapely.geometry import Polygon
 from sklearn.metrics import r2_score
 
 from deepberry.src.openalea.deepberry.utils import ellipse_interpolation
-from deepberry.src.openalea.deepberry.segmentation import berry_detection, VIGNETTE_SIZE_SEG, BERRY_SCALING_SEG
+from deepberry.src.openalea.deepberry.detection_and_segmentation import berry_detection, VIGNETTE_SIZE_SEG, BERRY_SCALING_SEG
 
 # https://github.com/yfpeng/object_detection_metrics
 # (which is adapted from https://github.com/rafaelpadilla/Object-Detection-Metrics)
@@ -39,11 +39,18 @@ seg_name = 'segmentation_ell3_unfinished.h5'
 model = load_model(path + seg_name, custom_objects={'dice_coef': None}, compile=False)
 
 image_name = 'ARCH2021-05-27_7791_3835_300.png'
-image_name = 'ARCH2022-05-18_1685_5601_180.png'
+# image_name = 'ARCH2022-05-18_1685_5601_180.png'
 
 image = cv2.cvtColor(cv2.imread('data/grapevine/dataset/image_valid/' + image_name), cv2.COLOR_BGR2RGB)
 
 boxes = berry_detection(image=image, model=model_det, score_threshold=0.985)
+
+
+# TODO remove
+from deepberry.src.openalea.deepberry.detection_and_segmentation import berry_segmentation, load_berry_models
+MODEL_DET, MODEL_SEG = load_berry_models('Y:/lepseBinaries/Trained_model/deepberry/new/')
+res_seg = berry_segmentation(image=image, model=MODEL_SEG, boxes=boxes)
+
 
 
 ds = int(VIGNETTE_SIZE_SEG / 2)

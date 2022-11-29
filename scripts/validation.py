@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Polygon
 from sklearn.metrics import r2_score
 
-from deepberry.src.openalea.deepberry.segmentation import berry_detection, berry_segmentation, load_berry_models
+from deepberry.src.openalea.deepberry.detection_and_segmentation import berry_detection, berry_segmentation, load_berry_models
 from deepberry.src.openalea.deepberry.utils import ellipse_interpolation, get_iou
 
 # https://github.com/yfpeng/object_detection_metrics

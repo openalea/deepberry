@@ -47,7 +47,7 @@ from skimage import io
 
 from deepberry.src.openalea.deepberry.segmentation import VIGNETTE_SIZE_DET, VIGNETTE_SIZE_SEG, BERRY_SCALING_SEG
 from deepberry.src.openalea.deepberry.utils import hsv_variation, adjust_contrast_brightness, ellipse_interpolation
-from deepberry.src.openalea.deepberry.color import mean_hue_berry
+from deepberry.src.openalea.deepberry.color import berry_features_extraction
 
 # dir containing the following folders: image_train, image_valid, label_train, label_valid
 DIR_DATASET = 'data/grapevine/dataset/'
@@ -216,7 +216,7 @@ for image_name in df['image_name'].unique():
     print(image_name)
     s = df[df['image_name'] == image_name]
     img = cv2.cvtColor(cv2.imread(DIR_DATASET + 'images/{}'.format(image_name)), cv2.COLOR_BGR2RGB)
-    new_s = mean_hue_berry(img, s)
+    new_s = berry_features_extraction(img, s)
     new_df.append(new_s)
 new_df = pd.concat(new_df)
 

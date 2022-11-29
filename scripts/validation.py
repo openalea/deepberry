@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Polygon
 from sklearn.metrics import r2_score
 
-from deepberry.src.openalea.deepberry.segmentation import detect_berry, segment_berry, load_models_berry
+from deepberry.src.openalea.deepberry.segmentation import berry_detection, berry_segmentation, load_berry_models
 from deepberry.src.openalea.deepberry.utils import ellipse_interpolation, get_iou
 
 # https://github.com/yfpeng/object_detection_metrics
@@ -49,7 +49,7 @@ def IOU(pol1_xy, pol2_xy):
     return polygon_intersection / polygon_union
 
 
-MODEL_DET, MODEL_SEG = load_models_berry('Y:/lepseBinaries/Trained_model/deepberry/new/')
+MODEL_DET, MODEL_SEG = load_berry_models('Y:/lepseBinaries/Trained_model/deepberry/new/')
 
 # dir containing image_train, image_valid folders
 DIR_DATASET = 'data/grapevine/dataset/'
@@ -59,6 +59,9 @@ df_annot = pd.read_csv(DIR_DATASET + 'grapevine_annotation.csv')
 
 # where the files created in this script are saved
 DIR_VALIDATION = 'data/grapevine/validation/'
+
+# this parameter is kept fixed for the computation of all metrics
+IOU_THRESHOLD = 0.75  # match between box1 and box2 if iou(box1, box2) > IOU_THRESHOLD
 
 # =====================================================================================================================
 
@@ -109,7 +112,7 @@ for k_image, image_name in enumerate(df_annot[df_annot['dataset'] == 'valid']['i
     img = cv2.cvtColor(cv2.imread(DIR_DATASET + 'image_valid/' + image_name), cv2.COLOR_BGR2RGB)
 
     # score_threshold=0 bc it's necessary to save all predictions to compute AP metric (and select optimal threshold)
-    pred = detect_berry(image=img, model=MODEL_DET, score_threshold=0.)
+    pred = berry_detection(image=img, model=MODEL_DET, score_threshold=0.)
 
     for _, row in obs.iterrows():
         score = 1
@@ -133,11 +136,14 @@ val_seg = []
 for k_image, image_name in enumerate(df_annot[df_annot['dataset'] == 'valid']['image_name'].unique()):
     print(image_name)
 
+    # TODO remove
+    image_name = 'ARCH2021-05-27_7791_3835_300.png'
+
     obs = df_annot[df_annot['image_name'] == image_name]
     img = cv2.cvtColor(cv2.imread('data/grapevine/dataset/image_valid/' + image_name), cv2.COLOR_BGR2RGB)
 
-    res_det = detect_berry(image=img, model=MODEL_DET, score_threshold=score_threshold)
-    pred = segment_berry(image=img, model=MODEL_SEG, boxes=res_det)
+    res_det = berry_detection(image=img, model=MODEL_DET, score_threshold=score_threshold)
+    pred = berry_segmentation(image=img, model=MODEL_SEG, boxes=res_det)
 
     for _, row in obs.iterrows():
         score = 1
@@ -168,15 +174,12 @@ val_seg = pd.DataFrame(val_seg, columns=['type',
                                        'ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a',
                                        'score', 'image_name'])
 
-val_seg.to_csv(DIR_VALIDATION + 'validation_segmentation_ell2.csv')
+val_seg.to_csv(DIR_VALIDATION + 'validation_segmentation_ell3.csv')
 
 # ===== display metrics =============================================================================================
 
 df = pd.read_csv('data/grapevine/validation/validation_backup8.csv')
 df['exp'] = [n.split('_')[0] for n in df['image_name']]
-
-# this parameter is kept fixed for the computation of all metrics
-iou_threshold = 0.75  # match between box1 and box2 if iou(box1, box2) > iou_threshold
 
 iterations = df['iteration'].unique()
 
@@ -188,7 +191,7 @@ for exps in [['DYN2020-05-15'], ['ARCH2021-05-27'], ['ARCH2022-05-18'],
     for i in iterations:
         print(i)
         dfi = df[(df['iteration'] == i) & (df['exp'].isin(exps))]
-        all_results['_'.join(exps)][i] = get_metrics(dfi, iou_threshold=iou_threshold)
+        all_results['_'.join(exps)][i] = get_metrics(dfi, iou_threshold=IOU_THRESHOLD)
 
 # Average Precision (AP) = f(iteration, exp)
 for exps in list(all_results.keys()):
@@ -201,7 +204,7 @@ best_iteration = 16000
 
 # Precision-Recall
 dfi = df[df['iteration'] == best_iteration]
-metric = get_metrics(dfi, iou_threshold=iou_threshold)
+metric = get_metrics(dfi, iou_threshold=IOU_THRESHOLD)
 p, r = metric.interpolated_precision, metric.interpolated_recall
 f1_score = (2 * p * r) / (p + r)
 dfi_pred = dfi[dfi['type'] == 'pred']
@@ -228,7 +231,7 @@ df_name = []
 dfi = df[df['iteration'] == best_iteration]
 for image_name in dfi['image_name'].unique():
     dfin = dfi[dfi['image_name'] == image_name]
-    metric = get_metrics(dfin, iou_threshold=iou_threshold)
+    metric = get_metrics(dfin, iou_threshold=IOU_THRESHOLD)
     df_name.append([image_name, dfin.iloc[0]['exp'], metric.ap, metric.num_groundtruth])
     plt.plot(metric.interpolated_precision, metric.interpolated_recall, 'k-')
 df_name = pd.DataFrame(df_name, columns=['image_name', 'exp', 'ap', 'n']).sort_values('ap')
@@ -247,7 +250,7 @@ for _, row in dfin.iterrows():
         plt.plot([x1, x1, x2, x2, x1], [y1, y2, y2, y1, y1], linestyle=linestyle, linewidth=linewidth, color=col)
 
 # load det + seg validation dataset
-val_seg = pd.read_csv(DIR_VALIDATION + 'validation_segmentation_ell2.csv')
+val_seg = pd.read_csv(DIR_VALIDATION + 'validation_segmentation.csv')
 
 # segmentation variables (on ellipses)
 val_seg['area'] = (val_seg['ell_w'] / 2) * (val_seg['ell_h'] / 2) * np.pi
@@ -265,7 +268,7 @@ for image_name in val_seg['image_name'].unique():
     n += len(pred_box)
     for k2, box2 in enumerate(pred_box):
         iou_list = [intersection_over_union(box1, box2) for box1 in obs_box]
-        if max(iou_list) > iou_threshold:  # filter couples that are not close enough to be considered as a match
+        if max(iou_list) > IOU_THRESHOLD:  # filter couples that are not close enough to be considered as a match
             k1 = np.argmax(iou_list)
             box_couples.append([obs.iloc[k1], pred.iloc[k2]])
             tp += 1
@@ -357,7 +360,7 @@ for iteration in [i for i in df['iteration'].unique()]:
                 # iou = IOU(pol_obs, pol_pred)
                 all_iou.append(iou)
             if len(all_iou) != 0:
-                if max(all_iou) > iou_threshold:
+                if max(all_iou) > IOU_THRESHOLD:
                     tp += 1
         fn = len(obs) - tp
         fp = len(pred) - tp

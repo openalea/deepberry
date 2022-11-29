@@ -15,7 +15,7 @@ exp, plantid, task, angle = 'ARCH2021-05-27', 7794, 3786, 210
 
 # ===== load image from index and run the pipeline on it ==============================================================
 
-from deepberry.src.openalea.deepberry.segmentation import detect_berry, segment_berry, load_models_berry
+from deepberry.src.openalea.deepberry.segmentation import berry_detection, berry_segmentation, load_berry_models
 
 index = pd.read_csv('data/grapevine/image_index.csv')
 index = index[index['imgangle'].notnull()]
@@ -26,36 +26,69 @@ row_index = index[(index['exp'] == exp) & (index['plantid'] == plantid) &
 img_path = 'Z:/{}/{}/{}.png'.format(row_index['exp'], row_index['taskid'], row_index['imgguid'])
 img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
 
-MODEL_DET, MODEL_SEG = load_models_berry('Y:/lepseBinaries/Trained_model/deepberry/new/')
+MODEL_DET, MODEL_SEG = load_berry_models('Y:/lepseBinaries/Trained_model/deepberry/new/')
 
-res_det = detect_berry(image=img, model=MODEL_DET, score_threshold=0.985)
-pred = segment_berry(image=img, model=MODEL_SEG, boxes=res_det)
+res_det = berry_detection(image=img, model=MODEL_DET, score_threshold=0.985)
+pred = berry_segmentation(image=img, model=MODEL_SEG, boxes=res_det)
 
 cv2.imwrite(DIR_OUTPUT + 'image.png', cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 res_det.to_csv(DIR_OUTPUT + 'detection.csv', index=False)
-pred.to_csv(DIR_OUTPUT + 'segmentation.csv', index=False)
+res_seg.to_csv(DIR_OUTPUT + 'segmentation.csv', index=False)
 
-# ===========================================================
+# ===================================================================================================================
 
 img = cv2.cvtColor(cv2.imread(DIR_OUTPUT + 'image.png'), cv2.COLOR_BGR2RGB)
 res_det = pd.read_csv(DIR_OUTPUT + 'detection.csv')
-pred = pd.read_csv(DIR_OUTPUT + 'segmentation.csv')
+res_seg = pd.read_csv(DIR_OUTPUT + 'segmentation.csv')
 
+fig = plt.figure()
 plt.imshow(img)
-for _, row in res_det.iterrows():
-    x, y, w, h = row[['x', 'y', 'w', 'h']]
-    plt.plot([x, x, x + w, x + w, x], [y, y + h, y + h, y, y], 'b-')
-for _, row in pred.iterrows():
+
+plt.savefig(DIR_OUTPUT + 'test2.png')
+
+# for _, row in res_det.iterrows():
+#     x, y, w, h = row[['x', 'y', 'w', 'h']]
+#     plt.plot([x, x, x + w, x + w, x], [y, y + h, y + h, y, y], 'b-')
+for _, row in res_seg.iterrows():
     x, y, w, h, a = row[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
     lsp_x, lsp_y = ellipse_interpolation(x=x, y=y, w=w, h=h, a=a, n_points=100)
     plt.plot(lsp_x, lsp_y, 'r-')
 
+xy_vignettes = [(540, 540), (810, 1620)]
+xy_subvignettes = [[(187, 348), (272, 185)], [(263, 47), (64, 313)]]
+
 # detection vignette
-w, px_spacing = 416, 270
-Y = list(np.arange(0, img.shape[0] - w, px_spacing)) + [img.shape[0] - w]
-X = list(np.arange(0, img.shape[1] - w, px_spacing)) + [img.shape[1] - w]
-for x in X:
-    for y in Y:
-        plt.plot(x, y, 'o', color='grey')
+# w, px_spacing = 416, 270
+# Y = list(np.arange(0, img.shape[0] - w, px_spacing)) + [img.shape[0] - w]
+# X = list(np.arange(0, img.shape[1] - w, px_spacing)) + [img.shape[1] - w]
+for (x, y) in xy_vignettes:
+    plt.plot([x, x, x + 416, x + 416, x], [y, y + 416, y + 416, y, y], '-', color='grey')
+
+# vignette crop
+for k, (x_vig, y_vig) in enumerate(xy_vignettes):
+    vig = img.copy()
+    vig = vig[y_vig:(y_vig + 416), x_vig:(x_vig + 416)]
+    cv2.imwrite(DIR_OUTPUT + 'vig_{}_{}.png'.format(x_vig, y_vig), cv2.cvtColor(vig, cv2.COLOR_RGB2BGR))
+    for _, row in res_det.iterrows():
+        x, y, w, h = row[['x', 'y', 'w', 'h']]
+        if x > x_vig and x + w < x_vig + 416 and y > y_vig and y + h < y_vig + 416:
+            vig = cv2.rectangle(vig, (int(x - x_vig), int(y - y_vig)),
+                                (int(x - x_vig + w), int(y - y_vig + h)), (255, 0, 0), 2)
+
+    for (x_subvig, y_subvig) in xy_subvignettes[k]:
+        d = np.sum((np.array((x_subvig + x_vig, y_subvig + y_vig)) - np.array(res_seg[['ell_x', 'ell_y']])) ** 2, axis=1)
+        row = res_seg.iloc[np.argmin(d)]
+        x, y = row['ell_x'] - x_vig, row['ell_y'] - y_vig
+        ds = 128 / 2
+        zoom = (128 * 0.75) / max(row[['ell_w', 'ell_h']])
+        vig = cv2.rectangle(vig, (int(x - ds/zoom), int(y - ds/zoom)),
+                            (int(x + ds/zoom), int(y + ds/zoom)), (0, 0, 255), 3)
+
+    # plt.imshow(vig)
+
+    cv2.imwrite(DIR_OUTPUT + 'vig_{}_{}_yolo.png'.format(x_vig, y_vig), cv2.cvtColor(vig, cv2.COLOR_RGB2BGR))
+
 
 plt.plot([x, x, x + w - 1, x + w - 1, x], [y, y + w - 1, y + w - 1, y, y], '-', color='grey')
+
+

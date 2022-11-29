@@ -12,7 +12,7 @@ VIGNETTE_SIZE_SEG = 128
 BERRY_SCALING_SEG = 0.75
 
 
-def detect_berry(image, model, max_box_size=150, score_threshold=0.95, ratio_threshold=2.5, nms_threshold=0.7):
+def berry_detection(image, model, max_box_size=150, score_threshold=0.95, ratio_threshold=2.5, nms_threshold=0.7):
     """
     max_box_size : maximum box height or width in the dataset
     nms_threshold : nms is never higher than 0.7 in the ground-truth annotated dataset
@@ -41,7 +41,7 @@ def detect_berry(image, model, max_box_size=150, score_threshold=0.95, ratio_thr
     return res_nms
 
 
-def segment_berry(image, model, boxes):
+def berry_segmentation(image, model, boxes):
 
     ds = int(VIGNETTE_SIZE_SEG / 2)
 
@@ -57,15 +57,15 @@ def segment_berry(image, model, boxes):
         ya, yb = round(y_vignette - (ds / zoom)), round(y_vignette + (ds / zoom))
         xa, xb = round(x_vignette - (ds / zoom)), round(x_vignette + (ds / zoom))
 
-        # check if box is not too close from image border
-        condition1 = (ds < y_vignette < image.shape[0] - ds) and (ds < x_vignette < image.shape[1] - ds)
         # check if enough space to unzoom in case of big berry
-        condition2 = (0 <= ya) and (yb < image.shape[0]) and (0 <= xa) and (xb <= image.shape[1])
+        enough_space = (0 <= ya) and (yb < image.shape[0]) and (0 <= xa) and (xb <= image.shape[1])
 
-        if condition1 and condition2:
+        if enough_space:
             seg_vignette = cv2.resize(image[ya:yb, xa:xb], (VIGNETTE_SIZE_SEG, VIGNETTE_SIZE_SEG))
             seg_vignette = (seg_vignette / 255.).astype(np.float64)
             seg_vignettes[row_index] = seg_vignette
+        else:
+            print('not enough space')
 
     if seg_vignettes:
 
@@ -82,10 +82,10 @@ def segment_berry(image, model, boxes):
             zoom = (VIGNETTE_SIZE_SEG * BERRY_SCALING_SEG) / np.max((w, h))
 
             # extraction of the mask edges
-            # edges, _ = cv2.findContours(seg, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            # if edges:
-            #     edges = edges[np.argmax([len(e) for e in edges])][:, 0, :]  # takes longest contour if several areas
-            edges = np.array(np.where(seg == 255))[::-1].T
+            edges, _ = cv2.findContours(seg, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            if edges:
+                edges = edges[np.argmax([len(e) for e in edges])][:, 0, :]  # takes longest contour if several areas
+            # edges = np.array(np.where(seg == 255))[::-1].T
 
             if len(edges) >= 5:  # cv2.fitEllipse() requires >= 5 points
 
@@ -99,12 +99,15 @@ def segment_berry(image, model, boxes):
 
                 res.append([ell_x_raw, ell_y_raw, ell_w_raw, ell_h_raw, ell_a_raw, score])
 
+            else:
+                print('len(edges) < 5')
+
     res = pd.DataFrame(res, columns=['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a', 'score'])
 
     return res
 
 
-def load_models_berry(path):
+def load_berry_models(path):
 
     # yolov4 object detection model
     weights_path = path + '/detection.weights'

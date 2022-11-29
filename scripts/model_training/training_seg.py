@@ -18,12 +18,14 @@ from tensorflow.keras import backend as K
 
 import segmentation_models as sm
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
 PATH = '/mnt/data/benoit/dataset_seg/'
 
-import tensorflow as tf
-gpus = tf.config.experimental.list_physical_devices('GPU')
-for gpu in gpus:
-    tf.config.experimental.set_memory_growth(gpu, True)
+# import tensorflow as tf
+# gpus = tf.config.experimental.list_physical_devices('GPU')
+# for gpu in gpus:
+#     tf.config.experimental.set_memory_growth(gpu, True)
 
 
 def load_dataset(path, indexes=None):
@@ -35,6 +37,9 @@ def load_dataset(path, indexes=None):
   Y = np.zeros((len(indexes) * 1, 128, 128, 2))
 
   for i, index in enumerate(indexes):
+      if i % 1000 == 0:
+          print(i)
+
       x = cv2.cvtColor(cv2.imread(path + '{}x.png'.format(index)), cv2.COLOR_BGR2RGB)
       y = cv2.imread(path + '{}y.png'.format(index), 0)  # 0 to read as grey scale
 
@@ -79,24 +84,13 @@ custom_loss = sm.losses.CategoricalCELoss()
 metric = dice_coef
 
 earlystopper = EarlyStopping(patience=5, verbose=1)
-checkpointer = ModelCheckpoint(PATH + 'UNET_deepberry.h5',
-                               verbose=1, save_best_only=True)
-
-# import gc
+checkpointer = ModelCheckpoint(PATH + 'UNET_deepberry.h5', verbose=1, save_best_only=True)
 
 model = sm.Unet(backbone_name=BACKBONE, encoder_weights=weights, classes=n_classes, activation=activation)
 
 model.compile(optimizer=OPTIMIZER, loss=custom_loss, metrics=[metric])
 
-for k in range(EPOCHS):
-    print('EPOCH {}'.format(k))
-    for indexes in indexes_batches:
-        X_train, Y_train = load_dataset('train/', indexes)
-        history = model.fit(X_train, Y_train, validation_data=(X_valid, Y_valid), batch_size=BATCH_SIZE, epochs=1,
-                            callbacks=[earlystopper, checkpointer])
+history = model.fit(X_train, Y_train, validation_data=(X_valid, Y_valid), batch_size=BATCH_SIZE, epochs=EPOCHS)
 
-        # memory management to avoid RAM crash
-        # https://stackoverflow.com/questions/1316767/how-can-i-explicitly-free-memory-in-python
-        del X_train
-        del Y_train
-        gc.collect()
+# ,callbacks=[earlystopper, checkpointer])
+

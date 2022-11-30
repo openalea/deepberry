@@ -15,16 +15,6 @@ from podm.box import intersection_over_union
 
 from keras.models import load_model
 
-# TODO remove
-# 0.053
-for k in np.linspace(0, 40000, 50).astype(int):
-    img = cv2.imread('data/grapevine/dataset/dataset_seg/train/{}y.png'.format(k), 0)
-
-    y_inside = img.copy() * 0
-    for i in range(len(img)):
-        limits = np.where(img[i] == 255)[0]
-        if len(limits) > 0:
-            y_inside[i][limits[0]:(limits[-1] + 1)][img[i][limits[0]:(limits[-1] + 1)] == 0] = 255
 
 # ===================================================================================================================
 
@@ -34,7 +24,7 @@ config_path = path + '/detection.cfg'
 net = cv2.dnn.readNetFromDarknet(config_path, weights_path)
 model_det = cv2.dnn_DetectionModel(net)
 
-seg_name = 'segmentation_ell3_unfinished.h5'
+seg_name = 'segmentation_ell3.h5'
 
 model = load_model(path + seg_name, custom_objects={'dice_coef': None}, compile=False)
 
@@ -44,13 +34,6 @@ image_name = 'ARCH2021-05-27_7791_3835_300.png'
 image = cv2.cvtColor(cv2.imread('data/grapevine/dataset/image_valid/' + image_name), cv2.COLOR_BGR2RGB)
 
 boxes = berry_detection(image=image, model=model_det, score_threshold=0.985)
-
-
-# TODO remove
-from deepberry.src.openalea.deepberry.detection_and_segmentation import berry_segmentation, load_berry_models
-MODEL_DET, MODEL_SEG = load_berry_models('Y:/lepseBinaries/Trained_model/deepberry/new/')
-res_seg = berry_segmentation(image=image, model=MODEL_SEG, boxes=boxes)
-
 
 
 ds = int(VIGNETTE_SIZE_SEG / 2)
@@ -84,19 +67,20 @@ if seg_vignettes:
 
     plt.figure()
     K = 6
-    Kj = 0
+    Kj = 2
     for enum, k in enumerate(range(Kj * (K ** 2), (Kj + 1) * (K ** 2))):
         ax = plt.subplot(K, K, enum + 1)
         # plt.imshow(list(seg_vignettes.values())[k])
-        seg = multi_seg[k]
-        plt.imshow(seg)
+        # seg = (multi_seg[k] > 0.5).astype(int)
+        seg = np.argmax(multi_seg[k], axis=2)
+        # plt.imshow(seg * 255.)
         # edges, _ = cv2.findContours(multi_seg[k], cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         # if edges:
         #     edges = edges[np.argmax([len(e) for e in edges])][:, 0, :]  # takes longest contour if several areas
-        edges = np.array(np.where(seg == 255))[::-1].T
+        edges = np.array(np.where(seg == 0))[::-1].T
 
         plt.imshow(list(seg_vignettes.values())[k])
-        edges = edges[::5]
+        edges = edges[::1]
         plt.plot(edges[:, 0], edges[:, 1], 'r.', markersize=0.7)
         # plt.imshow(seg)
 

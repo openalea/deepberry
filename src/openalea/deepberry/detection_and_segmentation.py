@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import pandas as pd
 
+# TODO : load unet model with opencv instead of keras ? using https://jeanvitor.com/tensorflow-object-detecion-opencv/
 from keras.models import load_model
 
 from deepberry.src.openalea.deepberry.utils import nms

@@ -42,9 +42,18 @@ selec = index[(index['exp'] == 'DYN2020-05-15') |
               ((index['exp'] == 'ARCH2021-05-27') &
                (index['genotype'].isin(['V.vinifera/V6863_H10-PL3', 'V.vinifera/V6860_DO4-PL4'])))]
 
+# filter problematic tasks
+quarantine_tasks = {'DYN2020-05-15': [2339, 2340, 2354, 2362, 2364, 2365, 2366, 2375, 2377, 2378, 2379],
+                    'ARCH2021-05-27': [3797, 3798, 3804, 3810, 3811, 3819, 3827, 3829, 3831, 3843],
+                    'ARCH2022-05-18': [5742, 5744, 5876, 5877]}
+for exp, tasks in quarantine_tasks.items():
+    selec = selec[~((selec['exp'] == exp) & (selec['taskid'].isin(tasks)))]
+
 # ===== non-temporal ==============================================================================================
 
-for _, row in selec.sample(50).iterrows():
+chrono = []
+
+for _, row in selec.iterrows():
 
     plantid_path = DIR_CACHE + 'cache_{}/segmentation/{}/'.format(row['exp'], row['plantid'])
     if not os.path.isdir(plantid_path):
@@ -75,6 +84,8 @@ for _, row in selec.sample(50).iterrows():
             print('{} | det: {:.1f}s, seg: {:.1f}s, features: {:.1f}s (n={})'.format(
                 row['plantid'], t1 - t0, t2 - t1, t3 - t2, len(res)))
 
+            chrono.append([t1 - t0, t2 - t1, t3 - t2, len(res)])
+
             res.to_csv(filename, index=False)
 
 
@@ -94,15 +105,6 @@ def run_one_plant(plantid_angle_period):
         os.mkdir(plantid_t_path)
 
     tasks = list(s.groupby('taskid')['timestamp'].mean().sort_values().reset_index()['taskid'])
-
-    # quarantine_exp
-    # TODO more clean
-    if exp == 'DYN2020-05-15':
-        tasks = [t for t in tasks if t >= 2380]
-    elif exp == 'ARCH2021-05-27':
-        tasks = [t for t in tasks if t not in [3797, 3798, 3804, 3810, 3811, 3819, 3827, 3829, 3831, 3843]]
-    elif exp == 'ARCH2022-05-18':
-        tasks = [t for t in tasks if t not in [5742, 5744, 5876, 5877]]
 
     # quarantine_plantid (temporal)
     quarantine_t = pd.read_csv(DIR_CACHE + 'cache_{0}/quarantine_temporal_{0}.csv'.format(exp))

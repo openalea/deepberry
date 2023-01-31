@@ -39,7 +39,6 @@ def scaled_cpd(X, Y, X_add=None, Y_add=None, transformation='affine'):
     return Y_reg
 
 
-
 def distance_matrix(sets):
     """
     sets = list of points sets.
@@ -128,99 +127,6 @@ def pairs_order(M, threshold=8, i_start=0):
     return pairs
 
 
-# def topo_features(ellipses, nvecs=3):
-#
-#     centers = np.array(ellipses[['ell_x', 'ell_y']])
-#
-#     # distance matrix
-#     D = np.zeros((len(ellipses), len(ellipses)))
-#     for i, c in enumerate(centers):
-#         D[i] = np.sqrt(np.sum((c - centers) ** 2, axis=1))
-#         D[i, i] = float('inf')
-#
-#     vecs = []
-#     for i_berry in range(len(centers)):
-#         vec = []
-#         ng = D[i_berry, :].argsort()[:nvecs]
-#         x, y = centers[i_berry]
-#         for i_ng in ng:
-#             x_ng, y_ng = centers[i_ng]
-#             vec += [x - x_ng, y - y_ng]
-#         vecs.append(vec)
-#
-#     return np.array(vecs)
-#
-#
-# def topo_registration(s1, s2, nvecs=3):
-#     """ s1, s2 = two sets (dataframes) of ellipses """
-#
-#     # TODO : vec[d1, a1, d2, a2, d3, a3] for rigid transfo (consistent with rotation+translation+reflection)
-#
-#     # TODO vec[[d, a]i], imax = 5, 10 ? faire un matching entre les deux vec et prendre la d mediane
-#
-#     # topologic features extraction
-#     n = min(nvecs, min(len(s1), len(s2)))
-#     ft1 = topo_features(s1, nvecs=n)
-#     ft2 = topo_features(s2, nvecs=n)
-#
-#     # distance matrix
-#     F = np.zeros((len(ft1), len(ft2)))
-#     for i, vec in enumerate(ft1):
-#         F[i] = np.sqrt(np.sum(np.abs(vec - ft2), axis=1))
-#
-#     # feature matching (greedy algorithm)
-#     matches, _ = matching(F)
-#     good_matches = matches[:(int(len(matches) / 4))]
-#
-#     centers1 = np.array(s1[['ell_x', 'ell_y']])
-#     centers2 = np.array(s2[['ell_x', 'ell_y']])
-#
-#     # plt.figure()
-#     # plt.gca().invert_yaxis()
-#     # plt.plot(centers1[:, 0], centers1[:, 1], 'bo', alpha=0.5)
-#     # plt.plot(centers2[:, 0], centers2[:, 1], 'ro', alpha=0.5)
-#     # for i1, i2 in good_matches:
-#     #     (x1, y1), (x2, y2) = centers1[i1], centers2[i2]
-#     #     plt.plot([x1, x2], [y1, y2], 'g-')
-#
-#     # translation registration
-#     dx, dy = np.mean(centers1[good_matches[:, 0]] - centers2[good_matches[:, 1]], axis=0)
-#
-#     # plt.figure()
-#     # plt.plot(centers1[:, 0], centers1[:, 1], 'bo', alpha=0.5)
-#     # centers2_reg = centers2 + np.array([dx, dy])
-#     # plt.plot(centers2_reg[:, 0], centers2_reg[:, 1], 'ro', alpha=0.5)
-#
-#     return np.array([dx, dy])
-
-
-# def get_features2(ellipses):
-#
-#     centers = np.array(ellipses[['ell_x', 'ell_y']])
-#
-#     # distance matrix
-#     D = np.zeros((len(ellipses), len(ellipses)))
-#     for i, c in enumerate(centers):
-#         D[i] = np.sqrt(np.sum((c - centers) ** 2, axis=1))
-#         D[i, i] = float('inf')
-#
-#     vecs = []
-#     for i_berry in range(len(centers)):
-#         vec = []
-#         ng = D[i_berry, :].argsort()[:5]
-#         x, y = centers[i_berry]
-#         for i_ng in ng:
-#             x_ng, y_ng = centers[i_ng]
-#             distance = np.sqrt((x - x_ng) ** 2 + (y - y_ng) ** 2)
-#             area = ellipses.iloc[i_ng]['area']
-#             vec += [[distance, area]]
-#         vecs.append(vec)
-#
-#     vecs = np.array(vecs)
-#
-#     return vecs
-
-
 def matching(M, threshold=float('inf')):
     """ greedy algorithm """
     M2 = M.copy()
@@ -237,18 +143,19 @@ def matching(M, threshold=float('inf')):
     return np.array(matches), dists
 
 
-def points_sets_alignment(points_sets, dist_mat, set_threshold=8, berry_threshold=16):
+def points_sets_alignment(points_sets, dist_mat, set_threshold=8, berry_threshold=16, t_start=None):
 
     # ===== selecting optimal value for t_start ======================================================================
 
-    t_best, k_max = None, float('-inf')
-    for t_start in range(len(points_sets)):
-        sets_pairs = pairs_order(dist_mat, i_start=t_start, threshold=set_threshold)
-        k_above = [k for k, (i, j) in enumerate(sets_pairs) if np.min(dist_mat[i, j]) > set_threshold]
-        k_fail = len(points_sets) - 1 if not k_above else k_above[0]
-        if k_fail > k_max:
-            t_best, k_max = t_start, k_fail
-    t_start = t_best
+    if t_start is None:
+        t_best, k_max = None, float('-inf')
+        for t_start in range(len(points_sets)):
+            sets_pairs = pairs_order(dist_mat, i_start=t_start, threshold=set_threshold)
+            k_above = [k for k, (i, j) in enumerate(sets_pairs) if np.min(dist_mat[i, j]) > set_threshold]
+            k_fail = len(points_sets) - 1 if not k_above else k_above[0]
+            if k_fail > k_max:
+                t_best, k_max = t_start, k_fail
+        t_start = t_best
 
     # ===== order of sets alignment ==================================================================================
 

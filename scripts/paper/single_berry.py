@@ -5,72 +5,116 @@ import cv2
 import matplotlib.pyplot as plt
 from skimage import io
 
-from scipy.ndimage import uniform_filter1d
 from scipy.stats import circmean
-from scipy import interpolate
+from scipy.interpolate import interp1d
 from sklearn.metrics import r2_score
 
-import openalea.maizetrack.phenomenal_display as phm_display
+from scipy.ndimage import uniform_filter1d
 
 from PIL import Image
 from deepberry.src.openalea.deepberry.utils import ellipse_interpolation
 
-index = pd.read_csv('data/grapevine/image_index.csv')
+
+DIR_OUTPUT = 'data/grapevine/paper/'
+
 
 exp = 'DYN2020-05-15'
-res = pd.read_csv('X:/phenoarch_cache/cache_{0}/full_results_{0}.csv'.format(exp))
-res['hue_scaled'] = ((180 - np.array(res['hue'])) - 100) % 180
+res = pd.read_csv('X:/phenoarch_cache/cache_{0}/full_results_temporal_{0}.csv'.format(exp))
+res['t'] = (res['timestamp'] - min(res['timestamp'])) / 3600 / 24
+
+# remove plantid used during training
 res = res[res['plantid'] != 7243]
+
+# remove task too late
 if exp == 'DYN2020-05-15':
-    res = res[~(res['task'] == 2656)]  # remove task too late
+    res = res[~(res['task'] == 2656)]
 
-# ===== filtering berries ============================================================================================
+# generated with berry_filtering.py
+df_berry = pd.read_csv('data/grapevine/berry_filter.csv')
 
-df_berry = []
+# ===== one berry as example ==========================================================================================
 
-for plantid in res['plantid'].unique():
+plantid, angle, berryid = 7232, 0, 28
+s = res[(res['plantid'] == plantid) & (res['angle'] == angle) & (res['berryid'] == berryid)].sort_values('t')
+hue_cv2 = (180 - 100 - np.array(s['hue_scaled'])) % 180
+colors = np.array([cv2.cvtColor(np.uint8([[[h, 255, 140]]]), cv2.COLOR_HSV2RGB)[0][0] / 255. for h in hue_cv2])
 
-    print(plantid)
-    selec = res[(res['plantid'] == plantid) & (res['berryid'] != -1)]
 
-    median_volume = np.median(selec.groupby(['angle', 'berryid'])['volume'].median())
-    n_last = max(1, round(len(selec['task'].unique()) / 15))
+fig, ax = plt.subplots(figsize=(10, 10), dpi=100)
+ax.tick_params(axis='both', which='major', labelsize=20)
+x, y = np.array(s['t']), np.array(s['volume']) / 1e4
+plt.scatter(x, y, marker='o', c=colors, s=50)
+plt.title('Single berry size dynamics', fontsize=35)
+plt.ylabel('Volume ($10^4$ px³)', fontsize=30)
+plt.xlabel('Time (days)', fontsize=30)
+y_averaged = uniform_filter1d(y, size=int(len(s) / 10), mode='nearest')
+plt.plot(x, y_averaged, '-', color='r', linewidth=3)
+mape = 100 * np.mean(np.abs((y_averaged - y) / y_averaged))
+txt = 'MAPE={}%'.format(round(mape, 2), int(angle), int(berryid))
+plt.text(0.99, 0.03, txt, horizontalalignment='right', verticalalignment='bottom', transform=ax.transAxes,
+         size=30, color='red')
 
-    for angle in [k * 30 for k in range(12)]:
-        s_angle = selec[selec['angle'] == angle]
-        for k in s_angle['berryid'].unique():
+plt.savefig(DIR_OUTPUT + 'single_volume', bbox_inches='tight')
+plt.close()
 
-            # one berry trajectory
-            s = s_angle[s_angle['berryid'] == k].sort_values('t')
-            v_averaged = uniform_filter1d(s['volume'], size=15, mode='nearest')  # TODO value tested only for dt=8h
-            mape = 100 * np.mean(np.abs((v_averaged - s['volume']) / v_averaged))
-            if len(s) > 1:
-                v_scaled = (v_averaged - np.min(v_averaged)) / (np.max(v_averaged) - np.min(v_averaged))
-                # TODO generalise more to different t distributions
-                normal_end_volume = np.median(v_scaled[-n_last:]) > 0.3
-                normal_end_hue = np.median(s['hue_scaled'][-n_last:]) > 120
-                enough_points = len(s) > int(0.90 * len(selec['task'].unique()))
-                not_small = np.median(s['volume']) > 0.2 * median_volume
-                df_berry.append([plantid, angle, k, mape, not_small, enough_points, normal_end_volume, normal_end_hue])
+fig, ax = plt.subplots(figsize=(10, 10), dpi=100)
+ax.tick_params(axis='both', which='major', labelsize=20)
+x, y = np.array(s['t']), np.array(s['hue_scaled'])
+plt.scatter(x, y, marker='o', c=colors, s=50)
+ax.tick_params(axis='both', which='major', labelsize=20)  # axis number size
+plt.title('Single berry color dynamics', fontsize=35)
+plt.ylabel('Scaled hue (°)', fontsize=30)
+plt.xlabel('Time (days)', fontsize=30)
 
-df_berry = pd.DataFrame(df_berry, columns=['plantid', 'angle', 'id', 'mape', 'not_small',
-                                               'enough_points', 'normal_end_volume', 'normal_end_hue'])
+plt.savefig(DIR_OUTPUT + 'single_hue', bbox_inches='tight')
+plt.close()
 
-# filter berries tracked during >90% of the experiment
-df_berry_filter = df_berry[df_berry['enough_points']]
-# filter berries with MAPE(V) > 2.5%
-df_berry_filter = df_berry_filter[df_berry_filter['mape'] < 2.5]
-# filter berries with no abnormalities
-df_berry_filter = df_berry_filter[(df_berry_filter['normal_end_volume']) & (df_berry_filter['normal_end_hue'])
-                                & (df_berry_filter['not_small'])]
+# ===== many individual graphs (supplementary material) ==================================================)============
 
-# ===== 1 graph, several single berry curves =========================================================================
+K = 7
+df_berry_s = df_berry.sample(K ** 2)
+# df_berry_selec = df_berry.sort_values('n', ascending=False).iloc[:(K ** 2)].sort_values('mape')
+# df_berry_selec = df_berry[(df_berry['n'] > 120) & (df_berry['mape'] < 2.5)]
+# df_berry_selec = df_berry[df_berry['n'] > 120].sort_values('mape').iloc[(K ** 2):(2 * (K ** 2))]
 
-plantid = 7238
+for var in ['volume', 'hue_scaled']:
+
+    plt.figure(var)
+
+    for i, (_, row) in enumerate(df_berry_s.iterrows()):
+        plantid, angle, berryid = row['plantid'], row['angle'], row['id']
+
+        s = res[(res['plantid'] == plantid) & (res['angle'] == angle) & (res['berryid'] == berryid)].sort_values('t')
+
+        if var == 'volume':
+            x, y = np.array(s['t']), np.array(s['volume']) / 10_000
+        elif var == 'hue_scaled':
+            x, y = np.array(s['t']), np.array(s['hue_scaled'])
+
+        ax = plt.subplot(K, K, i + 1)
+        ax.yaxis.get_major_locator().set_params(integer=True)  # y axis = int
+
+        hue_cv2 = (180 - 100 - np.array(s['hue_scaled'])) % 180
+        plt.scatter(x, y, marker='.', c=np.array([cv2.cvtColor(np.uint8([[[h, 255, 140]]]),
+                                                               cv2.COLOR_HSV2RGB)[0][0] / 255. for h in hue_cv2]))
+
+        if var == 'volume':
+            y_averaged = uniform_filter1d(y, size=15, mode='nearest')
+            plt.plot(x, y_averaged, '-', color='r', linewidth=2)
+        elif var == 'hue_scaled':
+            plt.ylim((25, 155))
+
+# ===== multiple berries in the same graph ============================================================================
+
+plantid = 7232
 
 selec = res[res['plantid'] == plantid]
-df_berry_selec = df_berry_filter[df_berry_filter['plantid'] == plantid]
+df_berry_selec = df_berry[df_berry['plantid'] == plantid]
 
+do_x_scaling = True
+
+positions_angle_t0 = []
+hists = {'vmax': [], 'h0': [], 'hn': [], 't_v': [], 't_h': []}
 
 for var in ['volume', 'hue_scaled']:
 
@@ -78,11 +122,18 @@ for var in ['volume', 'hue_scaled']:
     if var == 'volume':
         plt.title('Berry Volume (V)')
         plt.ylabel(r'$V / V_{max}$')
+        if do_x_scaling:
+            plt.xlabel(r'$t - t(y_{0.85})$ (days)')
+        else:
+            plt.xlabel(r'$t$ (days)')
     elif var == 'hue_scaled':
         plt.title('Berry Hue (H)')
         plt.ylabel(r'$(H - H_0) / (H_n - H_0)$')
         plt.ylim((-0.05, 1.03))
-    plt.xlabel('Time (days)')
+        if do_x_scaling:
+            plt.xlabel(r'$t - t(y_{0.5})$ (days)')
+        else:
+            plt.xlabel(r'$t$ (days)')
 
     xy_list = []
     for i, (_, row) in enumerate(df_berry_selec.iterrows()):
@@ -92,80 +143,88 @@ for var in ['volume', 'hue_scaled']:
         x, y = np.array(s['t']), np.array(s[var])
 
         if var == 'volume':
+            positions_angle_t0.append(list(s.iloc[0][['ell_x', 'ell_y', 'angle']]))
+
+        if var == 'volume':
             y_averaged = uniform_filter1d(y, size=15, mode='nearest')
-            y_scaled = y_averaged / np.max(y_averaged)
+            y_scaled = y_averaged / max(y_averaged)
+            hists['vmax'].append(max(y_averaged))
+            if do_x_scaling:
+                k_scaling = next(k for k, val in enumerate(y_scaled) if val > 0.85 and k >= np.argmin(y_scaled))
+                x_scaled = x - x[k_scaling]
+                hists['t_v'].append(x[k_scaling])
+            else:
+                x_scaled = x
         elif var == 'hue_scaled':
             y_scaled = (y - np.min(y[:10])) / (np.max(y[-10:]) - np.min(y[:10]))
+            hists['h0'].append(np.min(y[:10]))
+            hists['hn'].append(np.max(y[-10:]))
+            if do_x_scaling:
+                k_scaling = next(k for k, val in enumerate(y_scaled) if val > 0.5 and k >= np.argmin(y_scaled))
+                x_scaled = x - x[k_scaling]
+                hists['t_h'].append(x[k_scaling])
+            else:
+                x_scaled = x
 
-        xy_list.append([s['task'], x, y_scaled])
+        plt.plot(x_scaled, y_scaled, '-', color='grey', linewidth=0.6, alpha=0.6)
 
-        plt.plot(x, y_scaled, '-', color='grey', linewidth=0.6, alpha=0.6)
+        # x-scaling means that measurements are not at the same timings anymore across berries. So interpolation is
+        # necessary. (Here, it's chosen to interpolate through all x-int values across the berry range)
+        f = interp1d(x_scaled, y_scaled, fill_value='extrapolate')
+        x_lnp = np.arange(int(min(x_scaled)), int(max(x_scaled)) + 1)
+        xy_list.append([x_lnp, f(x_lnp)])
 
-    xy = pd.DataFrame(np.concatenate(xy_list, axis=1).T, columns=['task', 'x', 'y'])
+    xy = pd.DataFrame(np.concatenate(xy_list, axis=1).T, columns=['x', 'y'])
 
     for metrics, linestyle in zip(['mean', 'median'], ['-', '--']):
-        # mean berry
-        xy_gb = xy.groupby('task').agg(metrics).reset_index().sort_values('x')
-        plt.plot(xy_gb['x'], xy_gb['y'], 'k' + linestyle)
         # single berry
-        gb = selec.groupby('task')[[var, 't']].agg(metrics).reset_index().sort_values('t')
+        if do_x_scaling:
+            xy_gb = xy.groupby('x').agg(metrics).reset_index().sort_values('x')
+            plt.plot(xy_gb['x'], xy_gb['y'], 'k' + linestyle)
+        # mean berry (using the same berries as the one successfully tracked, to remove shift bias). Boths methods
+        # still differ by the way data are standardised (per berry or globally)
+        selec_same_berries = pd.concat([selec[(selec['angle'] == r['angle']) & (selec['berryid'] == r['id'])]
+                                        for _, r in df_berry.iterrows()])
+        gb = selec_same_berries.groupby('task')[[var, 't']].agg(metrics).reset_index().sort_values('t')
+        x_mean, y_mean = np.array(gb['t']), np.array(gb[var])
         if var == 'volume':
-            mean_scaled = gb[var] / np.max(gb[var])
+            y_mean_scaled = y_mean / max(y_mean)
+            k_scaling = next(k for k, val in enumerate(y_mean_scaled) if val > 0.85 and k >= np.argmin(y_mean_scaled))
         elif var == 'hue_scaled':
-            mean_scaled = (gb[var] - np.min(gb[var])) / (np.max(gb[var]) - np.min(gb[var]))
-        plt.plot(gb['t'], mean_scaled, 'r' + linestyle)
+            y_mean_scaled = (y_mean - min(y_mean)) / (max(y_mean) - min(y_mean))
+            k_scaling = next(k for k, val in enumerate(y_mean_scaled) if val > 0.5 and k >= np.argmin(y_mean_scaled))
+        if do_x_scaling:
+            x_mean_scaled = x_mean - x_mean[k_scaling]
+        else:
+            x_mean_scaled = x_mean
+        plt.plot(x_mean_scaled, y_mean_scaled, 'r' + linestyle)
 
+    plt.savefig(DIR_OUTPUT + 'multi_berry_{}_x{}.png'.format(var, do_x_scaling), bbox_inches='tight')
 
-# ===== effect of dt on t(H=0.1) =====================================================================================
+fig, ax = plt.subplots(figsize=(5, 3), dpi=100)
+ax.tick_params(axis='both', which='major', labelsize=20)
+plt.xlabel(r'$V_{max}$ ($10^4$ px³)', fontsize=30)
+plt.hist(np.array(hists['vmax']) / 1e4, 15, color='grey')
+plt.savefig(DIR_OUTPUT + 'multi_berry_hist_vmax.png', bbox_inches='tight')
 
-# ===== example for one berry
+fig, ax = plt.subplots(figsize=(5, 3), dpi=100)
+ax.tick_params(axis='both', which='major', labelsize=20)
+plt.xlabel(r'$t(y_{0.5})$ (days)', fontsize=30)
+plt.hist(np.array(hists['t_h']), 15, color='grey')
+plt.savefig(DIR_OUTPUT + 'multi_berry_hist_th.png', bbox_inches='tight')
 
-plantid = 7232
-selec = res[res['plantid'] == plantid]
-df_berry_selec = df_berry_filter[df_berry_filter['plantid'] == plantid]
+fig, ax = plt.subplots(figsize=(5, 3), dpi=100)
+ax.tick_params(axis='both', which='major', labelsize=20)
+plt.xlabel(r'$t(y_{0.85})$ (days)', fontsize=30)
+plt.hist(np.array(hists['t_v']), 15, color='grey')
+plt.savefig(DIR_OUTPUT + 'multi_berry_hist_tv.png', bbox_inches='tight')
 
-df = []
-# angle, berryid = df_berry_selec.iloc[1][['angle', 'id']]
-for k_berry, (_, row) in enumerate(df_berry_selec.iterrows()):
-    angle, berryid = row[['angle', 'id']]
-
-    # plt.figure()
-    periods = [1, 3, 6, 9, 12]
-    for k, period in enumerate(periods):
-        s = selec[(selec['angle'] == angle) & (selec['berryid'] == berryid)].sort_values('t')
-        s = s[::period]
-        x = np.array(s['t'])
-        y = np.array(s['hue_scaled'])
-        y_scaled = (y - np.median(y[:3])) / (np.median(y[-3:]) - np.median(y[:3]))
-
-        # ax = plt.subplot(len(periods), 1, k + 1)
-        # plt.xlim((min(selec['t']) - 2, max(selec['t']) + 2))
-        # plt.plot(x, y_scaled, 'k.-')
-
-        q = 0.1  # 0.5
-        k = next(k for k, val in enumerate(y_scaled) if val > q and k >= np.argmin(y_scaled))
-        t_01 = x[k - 1] + (x[k] - x[k - 1]) * ((q - y_scaled[k - 1]) / (y_scaled[k] - y_scaled[k - 1]))
-
-        # plt.plot(t_01, 0.1, 'go')
-        # plt.text(0.9, 0.1, 't(H=0.1)={}d'.format(round(t_01, 1)), ha='right', va='bottom', transform=ax.transAxes, color='green')
-        df.append([k_berry, period, t_01])
-
-df = pd.DataFrame(df, columns=['berry', 'period', 't01'])
-
-boxplots = {k * 8: [] for k in [3, 6, 9, 12]}
-for berry in df['berry'].unique():
-    row1 = df[(df['berry'] == berry) & (df['period'] == 1)].iloc[0]
-    for period in [3, 6, 9, 12]:
-        row2 = df[(df['berry'] == berry) & (df['period'] == period)].iloc[0]
-        boxplots[period * 8].append(row2['t01'] - row1['t01'])
-
-data = pd.DataFrame({"Box1": np.random.rand(10), "Box2": np.random.rand(10)})
-
-# Plot the dataframe
-pd.DataFrame(boxplots).plot(kind='box', title='')
-plt.ylabel('Difference with the reference value (Δt=8h)')
-plt.xlabel('Δt (h)')
-
+positions_angle_t0 = np.array(positions_angle_t0)
+i_selec = np.where(positions_angle_t0[:, 2] == 330)
+s = np.array(hists['t_v'])[i_selec]
+plt.scatter(positions_angle_t0[:, 0][i_selec], positions_angle_t0[:, 1][i_selec],
+            c=s)
+plt.colorbar()
 
 # ===== area = f(t) ==================================================================================================
 

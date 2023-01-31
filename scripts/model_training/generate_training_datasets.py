@@ -1,12 +1,5 @@
 """
 
-# darknet detector train training.data config_1class.cfg -dont_show
-# sudo docker run --rm -v $PWD:/workspace -w /workspace \daisukekobayashi/darknet:cpu darknet detector train training.data config_1class.cfg -dont_show
-# sudo docker run --runtime=nvidia --rm -v $PWD:/workspace -w /workspace \daisukekobayashi/darknet:gpu darknet detector train training.data config_1class.cfg -dont_show
-
-fit ellipse : https://stackoverflow.com/questions/61467807/detect-ellipse-parameters-from-a-given-elliptical-mask
-plot ellipse : https://stackoverflow.com/questions/10952060/plot-ellipse-with-matplotlib-pyplot-python
-
 a) en utilisant le docker (pour arreter; sudo docker stop), sur la carte gpu n°1
 sudo docker run --gpus '"device=1"' --runtime=nvidia --rm -v $PWD:/workspace -w /workspace \
 daisukekobayashi/darknet:gpu darknet detector train training.data config_1class.cfg -dont_show
@@ -23,12 +16,13 @@ darknet500 detector train training.data config_1class.cfg -dont_show | tee resul
 
 =====================================================================================================================
 
-# TODO in model_training/README
+# TODO notebook
 HOW TO TRAIN DEEBBERRY MODELS:
 - create a folder with the following 4 subfolders : image_train, image_valid, label_train, label_valid. The path of the
 main folder must be indicated in the PATH variable below. image_train / image_valid must contain RGB images of
-grapevine. label_train / label_valid must contain annotation .json files with the same name as their corresponding
-image. Each annotation file needs to have the same format as the .json files from the annotation tool Labelme.
+grapevine. label_train / label_valid must contain one annotation file (.json) per image with the same name as their
+corresponding image. Each annotation file needs to have the same format as the .json files from the annotation tool
+Labelme.
 -run this script (1- generate annot df, 2- generate yolo dataset, 3- generate unet dataset)
 - zip yolo dataset, put in on google drive, also put the .cfg file on drive, run the colab script for detection
 --> save model with the highest AP (Average Precision).
@@ -43,9 +37,9 @@ import matplotlib.pyplot as plt
 import cv2
 import os
 import pandas as pd
-from skimage import io
 
 from deepberry.src.openalea.deepberry.detection_and_segmentation import VIGNETTE_SIZE_DET, VIGNETTE_SIZE_SEG, BERRY_SCALING_SEG
+# TODO create a script with generate_dataset functions (hsv, etc.)
 from deepberry.src.openalea.deepberry.utils import hsv_variation, adjust_contrast_brightness, ellipse_interpolation
 from deepberry.src.openalea.deepberry.features_extraction import berry_features_extraction
 
@@ -54,6 +48,45 @@ DIR_DATASET = 'data/grapevine/dataset/'
 
 # image format
 H_IMG, W_IMG = 2448, 2048
+
+
+def labelme_json_postprocessing(json_file):
+
+    dfi = []
+
+    # load annotation (.json from Labelme or with the same format)
+    with open(json_file) as f:
+        anot = json.load(f)
+
+    for shape in anot['shapes']:
+        # extract x,y annotated around a berry
+        points = np.array(shape['points']).reshape((-1, 1, 2)).astype(int)  # reshaping & int
+
+        # fit ellipse equation (5 parameters) to the annotated x,y points with opencv
+        (ell_x, ell_y), (ell_w, ell_h), ell_a = cv2.fitEllipse(points)
+
+        # a) n points of the rotated ellipse
+        lsp_x, lsp_y = ellipse_interpolation(x=ell_x, y=ell_y, w=ell_w, h=ell_h, a=ell_a, n_points=100)
+        # b) deduce box coordinates (x,y = box center)
+        box_x, box_y, box_w, box_h = ell_x, ell_y, max(lsp_x) - min(lsp_x), max(lsp_y) - min(lsp_y)
+
+        dfi.append([ell_x, ell_y, ell_w, ell_h, ell_a, box_x, box_y, box_w, box_h])
+
+    dfi = pd.DataFrame(dfi, columns=['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a', 'box_x', 'box_y', 'box_w', 'box_h'])
+
+    return dfi
+
+
+def remove_boxes_outside_image_format(df):
+    res = df.copy()
+    indexes = []
+    for i, row in res.iterrows():
+        x, y, w, h = row['box_x'], row['box_y'], row['box_w'], row['box_h']
+        if not (0 + w / 2 < x < W_IMG - w / 2 and 0 + h / 2 < y < H_IMG - h / 2):
+            indexes.append(row.name)
+            print('removing one box annotation')
+    res = res.drop(indexes)
+    return res
 
 # ===== 1) merge all berry annotations in an easy-to-use dataframe ===================================================
 
@@ -65,36 +98,13 @@ for dataset in ['train', 'valid']:
     for file in anot_files:
         print(file)
 
-        # img = plt.imread(PATH + 'image_{}/'.format(dataset) + file.replace('.json', '.png'))
-        # plt.figure(file)
-        # plt.imshow(img)
+        dfi = labelme_json_postprocessing(DIR_DATASET + 'label_{}/{}'.format(dataset, file))
+        dfi['image_name'] = file.replace('.json', '.png')
+        dfi['dataset'] = dataset
+        df.append(dfi)
 
-        # load annotation (json from labelme)
-        with open(DIR_DATASET + 'label_{}/{}'.format(dataset, file)) as f:
-            anot = json.load(f)
+df = pd.concat(df)
 
-        for shape in anot['shapes']:
-
-            # extract x,y annotated around a berry
-            points = np.array(shape['points']).reshape((-1, 1, 2)).astype(int)  # reshaping & int
-
-            # fit ellipse equation (5 parameters) to the annotated x,y points with opencv
-            (ell_x, ell_y), (ell_w, ell_h), ell_a = cv2.fitEllipse(points)
-
-            # a) n points of the rotated ellipse
-            lsp_x, lsp_y = ellipse_interpolation(x=ell_x, y=ell_y, w=ell_w, h=ell_h, a=ell_a, n_points=100)
-            # b) deduce box coordinates (x,y = box center)
-            box_x, box_y, box_w, box_h = ell_x, ell_y, max(lsp_x) - min(lsp_x), max(lsp_y) - min(lsp_y)
-
-            # plt.plot(list(x_anot) + [x_anot[0]], list(y_anot) + [y_anot[0]], 'ro-')
-            # plt.plot(lsp_x, lsp_y, 'blue')
-            # plt.plot([xmin, xmin, xmax, xmax, xmin], [ymin, ymax, ymax, ymin, ymin], 'r-')
-
-            image_name = file.replace('.json', '.png')
-            df.append([ell_x, ell_y, ell_w, ell_h, ell_a, box_x, box_y, box_w, box_h, image_name, dataset])
-
-df = pd.DataFrame(df, columns=['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a', 'box_x', 'box_y', 'box_w', 'box_h',
-                               'image_name', 'dataset'])
 df.to_csv(DIR_DATASET + 'grapevine_annotation.csv', index=False)
 
 # ===== generate the training dataset for the detection model (Yolov4) ================================================
@@ -110,8 +120,6 @@ if not os.path.isdir(dir):
 
 for dataset in ['train', 'valid']:
 
-    n_vignettes = n_vignettes_dic[dataset]
-
     saving_path = dir + '/' + dataset
     if not os.path.isdir(saving_path):
         os.mkdir(saving_path)
@@ -119,13 +127,8 @@ for dataset in ['train', 'valid']:
     anot = df[df['dataset'] == dataset]
     anot['reps'] = 0
 
-    # remove berries with ellipse going out from image (should not happen, or very rare)
-    indexes = []
-    for i, row in anot.iterrows():
-        x, y, w, h = row['box_x'], row['box_y'], row['box_w'], row['box_h']
-        if not (0 + w / 2 < x < W_IMG - w / 2 and 0 + h / 2 < y < H_IMG - h / 2):
-            indexes.append(row.name)
-    anot = anot.drop(indexes)
+    # remove berries with box going out from image (should not happen, or very rare)
+    anot = remove_boxes_outside_image_format(anot)
 
     # remove warning for df.loc[...] = value (default='warn')
     pd.options.mode.chained_assignment = None
@@ -135,13 +138,15 @@ for dataset in ['train', 'valid']:
     images = {n: cv2.cvtColor(cv2.imread(DIR_DATASET + 'image_{}/'.format(dataset) + n), cv2.COLOR_BGR2RGB)
               for n in names}
 
-    for k_image in range(n_vignettes):
+    for k_image in range(n_vignettes_dic[dataset]):
 
         berry_selec = anot.sort_values('reps').iloc[0]
         print(k_image, len(anot[anot['reps'] == 0]), min(anot['reps']),
               round(np.mean(anot['reps']), 2), np.median(anot['reps']), max(anot['reps']))
 
         image = images[berry_selec['image_name']]
+
+        # TODO generate_one_vignette(image, anot, berry, ouput_path
 
         # center of the vignette
         if np.random.random() < 0.10:

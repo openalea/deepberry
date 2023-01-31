@@ -8,8 +8,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 exp = 'DYN2020-05-15'
-res = pd.read_csv('X:/phenoarch_cache/cache_{0}/full_results_{0}.csv'.format(exp))
-res['hue_scaled'] = ((180 - np.array(res['hue'])) - 100) % 180
+res = pd.read_csv('X:/phenoarch_cache/cache_{0}/full_results_segmentation_{0}.csv'.format(exp))
+res['t'] = (res['timestamp'] - min(res['timestamp'])) / 3600 / 24
 
 selec = res[res['plantid'] != 7243]
 

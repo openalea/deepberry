@@ -18,7 +18,7 @@ DIR_OUTPUT = 'data/grapevine/paper/fig_segmentation_output/'
 if not os.path.isdir(DIR_OUTPUT):
     os.mkdir(DIR_OUTPUT)
 
-df_val = pd.read_csv(DIR_VALIDATION + 'validation_segmentation_ell.csv')
+df_val = pd.read_csv(DIR_VALIDATION + 'validation_segmentation.csv')
 df_val['exp'] = [n.split('_')[0] for n in df_val['image_name']]
 
 # =====================================================================================================================

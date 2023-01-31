@@ -11,7 +11,7 @@ index = pd.read_csv('data/grapevine/image_index.csv')
 df = []
 for exp in ['DYN2020-05-15', 'ARCH2021-05-27']:
 
-    res = pd.read_csv('X:/phenoarch_cache/cache_{0}/full_results_{0}.csv'.format(exp))
+    res = pd.read_csv('X:/phenoarch_cache/cache_{0}_NEW/full_results_temporal_{0}.csv'.format(exp))
 
     # remove plantids included in the training set
     if exp == 'DYN2020-05-15':

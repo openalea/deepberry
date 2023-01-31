@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 # TODO : load unet model with opencv instead of keras ? using https://jeanvitor.com/tensorflow-object-detecion-opencv/
-from keras.models import load_model
+from tensorflow.keras.models import load_model
 
 from deepberry.src.openalea.deepberry.utils import nms
 
@@ -18,7 +18,7 @@ def berry_detection(image, model, max_box_size=150, score_threshold=0.985, ratio
     max_box_size : maximum box height or width in the dataset
     nms_threshold : nms is never higher than 0.7 in the ground-truth annotated dataset
     ratio_threshold: in ground-truth dataset; 0.5% of values > 2., 0.03% > 2.5
-    score_threshold: it probably needs to be re-evaluated if using a new model
+    score_threshold: needs to be re-evaluated if using a new model
     """
 
     px_spacing = VIGNETTE_SIZE_DET - max_box_size

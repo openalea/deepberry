@@ -29,7 +29,7 @@ img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
 MODEL_DET, MODEL_SEG = load_berry_models('Y:/lepseBinaries/Trained_model/deepberry/new/')
 
 res_det = berry_detection(image=img, model=MODEL_DET, score_threshold=0.985)
-pred = berry_segmentation(image=img, model=MODEL_SEG, boxes=res_det)
+res_seg = berry_segmentation(image=img, model=MODEL_SEG, boxes=res_det)
 
 cv2.imwrite(DIR_OUTPUT + 'image.png', cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 res_det.to_csv(DIR_OUTPUT + 'detection.csv', index=False)
@@ -37,58 +37,99 @@ res_seg.to_csv(DIR_OUTPUT + 'segmentation.csv', index=False)
 
 # ===================================================================================================================
 
+xy_vignettes = [(540, 540), (810, 1620)]
+# xy_subvignettes = [[(187, 348), (272, 185)], [(263, 47), (64, 313)]]
+xy_subvignettes = [(540 + 272, 540 + 185), (810 + 64, 1620 + 313)]
+
 img = cv2.cvtColor(cv2.imread(DIR_OUTPUT + 'image.png'), cv2.COLOR_BGR2RGB)
 res_det = pd.read_csv(DIR_OUTPUT + 'detection.csv')
 res_seg = pd.read_csv(DIR_OUTPUT + 'segmentation.csv')
 
-fig = plt.figure()
-plt.imshow(img)
-
-plt.savefig(DIR_OUTPUT + 'test2.png')
-
-# for _, row in res_det.iterrows():
-#     x, y, w, h = row[['x', 'y', 'w', 'h']]
-#     plt.plot([x, x, x + w, x + w, x], [y, y + h, y + h, y, y], 'b-')
-for _, row in res_seg.iterrows():
-    x, y, w, h, a = row[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
-    lsp_x, lsp_y = ellipse_interpolation(x=x, y=y, w=w, h=h, a=a, n_points=100)
-    plt.plot(lsp_x, lsp_y, 'r-')
-
-xy_vignettes = [(540, 540), (810, 1620)]
-xy_subvignettes = [[(187, 348), (272, 185)], [(263, 47), (64, 313)]]
+xy_subvignettes_sizes = []
+xy_subvignettes_ellipses = []
+for (x_subvig, y_subvig) in xy_subvignettes:
+    d = np.sum((np.array((x_subvig, y_subvig)) - np.array(res_seg[['ell_x', 'ell_y']])) ** 2, axis=1)
+    row = res_seg.iloc[np.argmin(d)]
+    x, y = row['ell_x'], row['ell_y']
+    ds = 128 / 2
+    zoom = (128 * 0.75) / max(row[['ell_w', 'ell_h']])
+    xy_subvignettes_sizes.append(ds / zoom)
+    xy_subvignettes_ellipses.append([416/2, 416/2, row['ell_w'], row['ell_h'], row['ell_a']])
 
 # detection vignette
 # w, px_spacing = 416, 270
 # Y = list(np.arange(0, img.shape[0] - w, px_spacing)) + [img.shape[0] - w]
 # X = list(np.arange(0, img.shape[1] - w, px_spacing)) + [img.shape[1] - w]
+img0 = img.copy()
 for (x, y) in xy_vignettes:
-    plt.plot([x, x, x + 416, x + 416, x], [y, y + 416, y + 416, y, y], '-', color='grey')
+    img0 = cv2.rectangle(img0, (round(x), round(y)), (round(x + 416), round(y + 416)), (0, 0, 255), 12)
 
-# vignette crop
+cv2.imwrite(DIR_OUTPUT + 'img0.png', cv2.cvtColor(img0, cv2.COLOR_RGB2BGR))
+
+img1 = img.copy()
+for _, row in res_det.iterrows():
+    x, y, w, h = row[['x', 'y', 'w', 'h']]
+    img1 = cv2.rectangle(img1, (round(x), round(y)), (round(x + w), round(y + h)), (255, 0, 0), 5)
+for (x_subvig, y_subvig), s in zip(xy_subvignettes, xy_subvignettes_sizes):
+    img1 = cv2.rectangle(img1, (int(x_subvig - s), int(y_subvig - s)), (int(x_subvig + s), int(y_subvig + s)),
+                         (0, 0, 255), 12)
+
+cv2.imwrite(DIR_OUTPUT + 'img1.png', cv2.cvtColor(img1, cv2.COLOR_RGB2BGR))
+
+img2 = img.copy()
+for _, row in res_seg.iterrows():
+    x, y, w, h, a = row[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
+    lsp_x, lsp_y = ellipse_interpolation(x=x, y=y, w=w, h=h, a=a, n_points=100)
+
+    img2 = cv2.ellipse(img2, (round(x), round(y)), (round(w / 2), round(h / 2)), a, 0., 360, 255, 5)
+
+cv2.imwrite(DIR_OUTPUT + 'img2.png', cv2.cvtColor(img2, cv2.COLOR_RGB2BGR))
+
+# ===== yolo vignettes ================================================================================================
 for k, (x_vig, y_vig) in enumerate(xy_vignettes):
+
+    # raw vignette = yolo input
     vig = img.copy()
     vig = vig[y_vig:(y_vig + 416), x_vig:(x_vig + 416)]
-    cv2.imwrite(DIR_OUTPUT + 'vig_{}_{}.png'.format(x_vig, y_vig), cv2.cvtColor(vig, cv2.COLOR_RGB2BGR))
+    cv2.imwrite(DIR_OUTPUT + 'vig_{}_{}_yolo_x.png'.format(x_vig, y_vig), cv2.cvtColor(vig, cv2.COLOR_RGB2BGR))
+
+    # vignette + box = yolo output
     for _, row in res_det.iterrows():
         x, y, w, h = row[['x', 'y', 'w', 'h']]
         if x > x_vig and x + w < x_vig + 416 and y > y_vig and y + h < y_vig + 416:
             vig = cv2.rectangle(vig, (int(x - x_vig), int(y - y_vig)),
                                 (int(x - x_vig + w), int(y - y_vig + h)), (255, 0, 0), 2)
+    cv2.imwrite(DIR_OUTPUT + 'vig_{}_{}_yolo_y.png'.format(x_vig, y_vig), cv2.cvtColor(vig, cv2.COLOR_RGB2BGR))
 
-    for (x_subvig, y_subvig) in xy_subvignettes[k]:
-        d = np.sum((np.array((x_subvig + x_vig, y_subvig + y_vig)) - np.array(res_seg[['ell_x', 'ell_y']])) ** 2, axis=1)
-        row = res_seg.iloc[np.argmin(d)]
-        x, y = row['ell_x'] - x_vig, row['ell_y'] - y_vig
-        ds = 128 / 2
-        zoom = (128 * 0.75) / max(row[['ell_w', 'ell_h']])
-        vig = cv2.rectangle(vig, (int(x - ds/zoom), int(y - ds/zoom)),
-                            (int(x + ds/zoom), int(y + ds/zoom)), (0, 0, 255), 3)
+# ===== seg subvignettes ==============================================================================================
+for (x_subvig, y_subvig), s, (x, y, w, h, a) in zip(xy_subvignettes[::-1], xy_subvignettes_sizes[::-1],
+                                                    xy_subvignettes_ellipses[::-1]):
 
-    # plt.imshow(vig)
+    # raw subvignette = seg input
+    vig = img[round(y_subvig - s):round(y_subvig + s), round(x_subvig - s):round(x_subvig + s)]
+    print(vig.shape)
+    vig1 = cv2.resize(vig, (128, 128))
+    vig1 = cv2.resize(vig1, (416, 416), interpolation=cv2.INTER_NEAREST)
+    cv2.imwrite(DIR_OUTPUT + 'vig_{}_{}_seg_x.png'.format(x_subvig, y_subvig), cv2.cvtColor(vig1, cv2.COLOR_RGB2BGR))
 
-    cv2.imwrite(DIR_OUTPUT + 'vig_{}_{}_yolo.png'.format(x_vig, y_vig), cv2.cvtColor(vig, cv2.COLOR_RGB2BGR))
+    # subvignette + ellipses = seg output
+    z = 128 / vig.shape[0]
+    vig2 = cv2.ellipse(np.zeros((128, 128)), (64, 64), (round(z * w / 2), round(z * h / 2)), a, 0., 360, 255, -1)
+    vig2 = cv2.resize(vig2, (416, 416), interpolation=cv2.INTER_NEAREST)
+    cv2.imwrite(DIR_OUTPUT + 'vig_{}_{}_seg_y.png'.format(x_subvig, y_subvig), vig2)
 
 
-plt.plot([x, x, x + w - 1, x + w - 1, x], [y, y + w - 1, y + w - 1, y, y], '-', color='grey')
+
+
+
+
+
+
+
+
+
+
+
+
 
 

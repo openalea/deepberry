@@ -16,9 +16,10 @@ from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 # from tensorflow.keras.losses import categorical_crossentropy
 from tensorflow.keras import backend as K
 
+%env SM_FRAMEWORK=tf.keras  # to use before importing segmentation_models
 import segmentation_models as sm
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 PATH = '/mnt/data/benoit/dataset_seg/'
 
@@ -90,7 +91,7 @@ model = sm.Unet(backbone_name=BACKBONE, encoder_weights=weights, classes=n_class
 
 model.compile(optimizer=OPTIMIZER, loss=custom_loss, metrics=[metric])
 
-history = model.fit(X_train, Y_train, validation_data=(X_valid, Y_valid), batch_size=BATCH_SIZE, epochs=EPOCHS)
+history = model.fit(X_train, Y_train, validation_data=(X_valid, Y_valid), batch_size=BATCH_SIZE, epochs=EPOCHS
+                    ,callbacks=[earlystopper, checkpointer])
 
-# ,callbacks=[earlystopper, checkpointer])
-
+# model.save(PATH + 'model.h5')

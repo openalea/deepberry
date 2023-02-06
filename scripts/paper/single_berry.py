@@ -5,7 +5,7 @@ import cv2
 import matplotlib.pyplot as plt
 from skimage import io
 
-from scipy.stats import circmean
+from scipy.stats import circmean, linregress
 from scipy.interpolate import interp1d
 from sklearn.metrics import r2_score
 
@@ -113,118 +113,234 @@ df_berry_selec = df_berry[df_berry['plantid'] == plantid]
 
 do_x_scaling = True
 
-positions_angle_t0 = []
-hists = {'vmax': [], 'h0': [], 'hn': [], 't_v': [], 't_h': []}
+hists = {'v0': [], 'vmax': [], 't_v': [], 'kin_v': [],
+         'h0': [], 'hn': [], 't_h': [], 'kin_h': []}
 
-for var in ['volume', 'hue_scaled']:
+for var in ['volume', 'hue_scaled', 'both']:
 
-    plt.figure()
+    fig, ax = plt.subplots()
+    fontsize = 16
+    ax.tick_params(axis='both', which='major', labelsize=10)
     if var == 'volume':
-        plt.title('Berry Volume (V)')
-        plt.ylabel(r'$V / V_{max}$')
+        plt.ylim((-0.1, 1.1))
+        plt.ylabel(r'$V_s = (V - V_0) / (V_{n} - V_0)$', fontsize=fontsize)
         if do_x_scaling:
-            plt.xlabel(r'$t - t(y_{0.85})$ (days)')
+            plt.xlabel(r'$t - t(V_s = 0.5)$ (days)', fontsize=fontsize)
         else:
-            plt.xlabel(r'$t$ (days)')
+            plt.xlabel(r'$t$ (days)', fontsize=fontsize)
     elif var == 'hue_scaled':
-        plt.title('Berry Hue (H)')
-        plt.ylabel(r'$(H - H_0) / (H_n - H_0)$')
-        plt.ylim((-0.05, 1.03))
+        plt.ylabel(r'$H_s = (H - H_0) / (H_n - H_0)$', fontsize=fontsize)
+        plt.ylim((-0.1, 1.1))
         if do_x_scaling:
-            plt.xlabel(r'$t - t(y_{0.5})$ (days)')
+            plt.xlabel(r'$t - t(H_s = 0.5)$ (days)', fontsize=fontsize)
         else:
-            plt.xlabel(r'$t$ (days)')
+            plt.xlabel(r'$t$ (days)', fontsize=fontsize)
+
+    elif var == 'both':
+        plt.xlim((-0.1, 1.1))
+        plt.ylim((-0.1, 1.1))
+        plt.xlabel(r'$V_s$', fontsize=fontsize)
+        plt.ylabel(r'$H_s$', fontsize=fontsize)
+
+    if var in ['volume', 'hue_scaled']:
+        if do_x_scaling:
+            plt.axhline(y=0.25, color='g', linestyle='--', linewidth=1., alpha=0.6)
+            plt.axhline(y=0.75, color='g', linestyle='--', linewidth=1., alpha=0.6)
+        else:
+            plt.axhline(y=0.5, color='g', linestyle='--', linewidth=1., alpha=0.6)
 
     xy_list = []
     for i, (_, row) in enumerate(df_berry_selec.iterrows()):
         angle, berryid = row['angle'], row['id']
         s = selec[(selec['angle'] == angle) & (selec['berryid'] == berryid)].sort_values('t')
 
-        x, y = np.array(s['t']), np.array(s[var])
+        x_scaled, y_scaled = {}, {}
+
+        # ===== Volume ================================================================================================
+
+        x, y = np.array(s['t']), np.array(s['volume'])
+        y_averaged = uniform_filter1d(y, size=15, mode='nearest')
+
+        # ys = y_averaged / max(y_averaged)
+        y0, yn = np.median(y_averaged[:20]), max(y_averaged)
+        ys = (y_averaged - y0) / (yn - y0)
 
         if var == 'volume':
-            positions_angle_t0.append(list(s.iloc[0][['ell_x', 'ell_y', 'angle']]))
+            hists['v0'].append(y0)
+            hists['vmax'].append(yn)
 
-        if var == 'volume':
-            y_averaged = uniform_filter1d(y, size=15, mode='nearest')
-            y_scaled = y_averaged / max(y_averaged)
-            hists['vmax'].append(max(y_averaged))
-            if do_x_scaling:
-                k_scaling = next(k for k, val in enumerate(y_scaled) if val > 0.85 and k >= np.argmin(y_scaled))
-                x_scaled = x - x[k_scaling]
+            # kinetics
+            k25 = next(k for k, val in enumerate(ys) if val > 0.25 and k >= np.argmin(ys))
+            k75 = next(k for k, val in enumerate(ys) if val > 0.75 and k >= np.argmin(ys))
+            hists['kin_v'].append(x[k75] - x[k25])
+
+        if do_x_scaling:
+            k_scaling = next(k for k, val in enumerate(ys) if val > 0.5 and k >= np.argmin(ys))
+            xs = x - x[k_scaling]
+            if var == 'volume':
                 hists['t_v'].append(x[k_scaling])
-            else:
-                x_scaled = x
-        elif var == 'hue_scaled':
-            y_scaled = (y - np.min(y[:10])) / (np.max(y[-10:]) - np.min(y[:10]))
-            hists['h0'].append(np.min(y[:10]))
-            hists['hn'].append(np.max(y[-10:]))
-            if do_x_scaling:
-                k_scaling = next(k for k, val in enumerate(y_scaled) if val > 0.5 and k >= np.argmin(y_scaled))
-                x_scaled = x - x[k_scaling]
-                hists['t_h'].append(x[k_scaling])
-            else:
-                x_scaled = x
+        else:
+            xs = x
+        x_scaled['volume'], y_scaled['volume'] = xs, ys
 
-        plt.plot(x_scaled, y_scaled, '-', color='grey', linewidth=0.6, alpha=0.6)
+        # ===== Color =================================================================================================
+
+        x, y = np.array(s['t']), np.array(s['hue_scaled'])
+        y0, yn = np.median(y[:20]), np.median(y[-20:])
+        ys = (y - y0) / (yn - y0)
+
+        if var == 'hue_scaled':
+            hists['h0'].append(y0)
+            hists['hn'].append(yn)
+
+            # kinetics
+            k25 = next(k for k, val in enumerate(ys) if val > 0.25 and k >= np.argmin(ys))
+            k75 = next(k for k, val in enumerate(ys) if val > 0.75 and k >= np.argmin(ys))
+            hists['kin_h'].append(x[k75] - x[k25])
+
+        if do_x_scaling:
+            k_scaling = next(k for k, val in enumerate(ys) if val > 0.5 and k >= np.argmin(ys))
+            xs = x - x[k_scaling]
+            if var == 'hue_scaled':
+                hists['t_h'].append(x[k_scaling])
+        else:
+            xs = x
+        x_scaled['hue_scaled'], y_scaled['hue_scaled'] = xs, ys
+
+        # =============================================================================================================
+
+        if var == 'both':
+            x_plot, y_plot = y_scaled['volume'], y_scaled['hue_scaled']
+        else:
+            x_plot, y_plot = x_scaled[var], y_scaled[var]
+
+        plt.plot(x_plot, y_plot, '-', color='grey', linewidth=0.6, alpha=0.6)
 
         # x-scaling means that measurements are not at the same timings anymore across berries. So interpolation is
         # necessary. (Here, it's chosen to interpolate through all x-int values across the berry range)
-        f = interp1d(x_scaled, y_scaled, fill_value='extrapolate')
-        x_lnp = np.arange(int(min(x_scaled)), int(max(x_scaled)) + 1)
+        f = interp1d(x_plot, y_plot, fill_value='extrapolate')
+        x_lnp = np.arange(int(min(x_plot)), int(max(x_plot)) + 1)
         xy_list.append([x_lnp, f(x_lnp)])
 
     xy = pd.DataFrame(np.concatenate(xy_list, axis=1).T, columns=['x', 'y'])
 
-    for metrics, linestyle in zip(['mean', 'median'], ['-', '--']):
-        # single berry
-        if do_x_scaling:
-            xy_gb = xy.groupby('x').agg(metrics).reset_index().sort_values('x')
-            plt.plot(xy_gb['x'], xy_gb['y'], 'k' + linestyle)
-        # mean berry (using the same berries as the one successfully tracked, to remove shift bias). Boths methods
-        # still differ by the way data are standardised (per berry or globally)
-        selec_same_berries = pd.concat([selec[(selec['angle'] == r['angle']) & (selec['berryid'] == r['id'])]
-                                        for _, r in df_berry.iterrows()])
-        gb = selec_same_berries.groupby('task')[[var, 't']].agg(metrics).reset_index().sort_values('t')
-        x_mean, y_mean = np.array(gb['t']), np.array(gb[var])
-        if var == 'volume':
-            y_mean_scaled = y_mean / max(y_mean)
-            k_scaling = next(k for k, val in enumerate(y_mean_scaled) if val > 0.85 and k >= np.argmin(y_mean_scaled))
-        elif var == 'hue_scaled':
-            y_mean_scaled = (y_mean - min(y_mean)) / (max(y_mean) - min(y_mean))
-            k_scaling = next(k for k, val in enumerate(y_mean_scaled) if val > 0.5 and k >= np.argmin(y_mean_scaled))
-        if do_x_scaling:
-            x_mean_scaled = x_mean - x_mean[k_scaling]
-        else:
-            x_mean_scaled = x_mean
-        plt.plot(x_mean_scaled, y_mean_scaled, 'r' + linestyle)
+    # for metrics, linestyle in zip(['mean'], ['-']):
+    #     # single berry
+    #     if do_x_scaling:
+    #         xy_gb = xy.groupby('x').agg(metrics).reset_index().sort_values('x')
+    #         plt.plot(xy_gb['x'], xy_gb['y'], 'k' + linestyle)
+
+        # # mean berry (using the same berries as the one successfully tracked, to remove shift bias). Boths methods
+        # # still differ by the way data are standardised (per berry or globally)
+        # selec_same_berries = pd.concat([selec[(selec['angle'] == r['angle']) & (selec['berryid'] == r['id'])]
+        #                                 for _, r in df_berry.iterrows()])
+        # gb = selec_same_berries.groupby('task')[[var, 't']].agg(metrics).reset_index().sort_values('t')
+        # x_mean, y_mean = np.array(gb['t']), np.array(gb[var])
+        # if var == 'volume':
+        #     y_mean_scaled = y_mean / max(y_mean)
+        #     k_scaling = next(k for k, val in enumerate(y_mean_scaled) if val > 0.85 and k >= np.argmin(y_mean_scaled))
+        # elif var == 'hue_scaled':
+        #     y_mean_scaled = (y_mean - min(y_mean)) / (max(y_mean) - min(y_mean))
+        #     k_scaling = next(k for k, val in enumerate(y_mean_scaled) if val > 0.5 and k >= np.argmin(y_mean_scaled))
+        # if do_x_scaling:
+        #     x_mean_scaled = x_mean - x_mean[k_scaling]
+        # else:
+        #     x_mean_scaled = x_mean
+        # plt.plot(x_mean_scaled, y_mean_scaled, 'r' + linestyle)
 
     plt.savefig(DIR_OUTPUT + 'multi_berry_{}_x{}.png'.format(var, do_x_scaling), bbox_inches='tight')
 
-fig, ax = plt.subplots(figsize=(5, 3), dpi=100)
-ax.tick_params(axis='both', which='major', labelsize=20)
+
+def fig_histo():
+    fig, ax = plt.subplots(figsize=(5, 1.5), dpi=100)
+    plt.gca().axes.yaxis.set_ticklabels([])
+    plt.gca().axes.get_yaxis().set_visible(False)
+    ax.tick_params(axis='both', which='major', labelsize=20)
+
+
+# V0
+fig_histo()
+plt.xlabel(r'$V_0$ ($10^4$ px³)', fontsize=30)
+plt.hist(np.array(hists['v0']) / 1e4, 15, color='grey')
+plt.savefig(DIR_OUTPUT + 'multi_berry_hist_v0.png', bbox_inches='tight')
+
+# Vmax
+fig_histo()
 plt.xlabel(r'$V_{max}$ ($10^4$ px³)', fontsize=30)
 plt.hist(np.array(hists['vmax']) / 1e4, 15, color='grey')
 plt.savefig(DIR_OUTPUT + 'multi_berry_hist_vmax.png', bbox_inches='tight')
 
-fig, ax = plt.subplots(figsize=(5, 3), dpi=100)
-ax.tick_params(axis='both', which='major', labelsize=20)
-plt.xlabel(r'$t(y_{0.5})$ (days)', fontsize=30)
-plt.hist(np.array(hists['t_h']), 15, color='grey')
+# H0
+fig_histo()
+plt.xlabel(r'$H_0$', fontsize=30)
+plt.hist(np.array(hists['h0']), 15, color='grey')
+plt.savefig(DIR_OUTPUT + 'multi_berry_hist_h0.png', bbox_inches='tight')
+
+# Hn
+fig_histo()
+plt.xlabel(r'$H_n$', fontsize=30)
+plt.hist(np.array(hists['hn']), 15, color='grey')
+plt.savefig(DIR_OUTPUT + 'multi_berry_hist_hn.png', bbox_inches='tight')
+
+# V_kin
+fig_histo()
+plt.xlim((-1, 16))
+plt.xlabel(r'$V_{kin} = t2 - t1$ (days)', fontsize=30)
+plt.hist(np.array(hists['kin_v']), 15, color='green', alpha=0.6)
+plt.savefig(DIR_OUTPUT + 'multi_berry_hist_vkin.png', bbox_inches='tight')
+
+# H_kin
+fig_histo()
+plt.xlim((-1, 16))
+plt.xlabel(r'$H_{kin} = t2 - t1$ (days)', fontsize=30)
+plt.hist(np.array(hists['kin_h']), 15, color='green', alpha=0.6)
+plt.savefig(DIR_OUTPUT + 'multi_berry_hist_hkin.png', bbox_inches='tight')
+
+# t(Hs = 0.5)
+fig_histo()
+plt.xlim((9, 36))
+plt.xlabel(r'$t(H_s = 0.5)$ (days)', fontsize=30)
+plt.hist(np.array(hists['t_h']), 15, color='green', alpha=0.6)
 plt.savefig(DIR_OUTPUT + 'multi_berry_hist_th.png', bbox_inches='tight')
 
-fig, ax = plt.subplots(figsize=(5, 3), dpi=100)
-ax.tick_params(axis='both', which='major', labelsize=20)
-plt.xlabel(r'$t(y_{0.85})$ (days)', fontsize=30)
-plt.hist(np.array(hists['t_v']), 15, color='grey')
+# t(Vs = 0.5)
+fig_histo()
+plt.xlim((9, 36))
+plt.xlabel(r'$t(V_s = 0.5)$ (days)', fontsize=30)
+plt.hist(np.array(hists['t_v']), 15, color='green', alpha=0.6)
 plt.savefig(DIR_OUTPUT + 'multi_berry_hist_tv.png', bbox_inches='tight')
 
-positions_angle_t0 = np.array(positions_angle_t0)
-i_selec = np.where(positions_angle_t0[:, 2] == 330)
-s = np.array(hists['t_v'])[i_selec]
-plt.scatter(positions_angle_t0[:, 0][i_selec], positions_angle_t0[:, 1][i_selec],
-            c=s)
-plt.colorbar()
+# t(Vs = 0.5) vs t(Hs = 0.5)
+fig, ax = plt.subplots(figsize=(3, 5), dpi=100)
+ax.tick_params(axis='both', which='major', labelsize=20)
+x, y = hists['t_v'], hists['t_h']
+ax.axline((np.mean(x), np.mean(x)), slope=1, color='k', linestyle='-', label='x = y')
+plt.plot(x, y, '.', color='grey')
+r2 = linregress(x, y)[2] ** 2
+plt.text(0.52, 0.03, f'R² = {r2:.2f}', color='red',
+         horizontalalignment='left', verticalalignment='bottom', transform=ax.transAxes, fontsize=15)
+a, b = np.polyfit(x, y, 1)
+plt.plot([min(x), max(x)], a * np.array([min(x), max(x)]) + b, '--', color='r', label=f'y = {a:.{2}f}x {b:+.{2}f}')
+plt.legend()
+plt.xlabel(r'$t(V_s = 0.5)$ (days)', fontsize=20)
+plt.ylabel(r'$t(H_s = 0.5)$ (days)', fontsize=20)
+plt.savefig(DIR_OUTPUT + 'multi_berry_hist_cor1.png', bbox_inches='tight')
+
+# t(Vs = 0.5) vs t(Hs = 0.5)
+fig, ax = plt.subplots(figsize=(3, 5), dpi=100)
+ax.tick_params(axis='both', which='major', labelsize=20)
+x, y = hists['kin_v'], hists['kin_h']
+ax.axline((np.mean(x), np.mean(x)), slope=1, color='k', linestyle='-', label='x = y')
+plt.plot(x, y, '.', color='grey')
+r2 = linregress(x, y)[2] ** 2
+plt.text(0.52, 0.03, f'R² = {r2:.2f}', color='red',
+         horizontalalignment='left', verticalalignment='bottom', transform=ax.transAxes, fontsize=15)
+a, b = np.polyfit(x, y, 1)
+plt.plot([min(x), max(x)], a * np.array([min(x), max(x)]) + b, '--', color='r', label=f'y = {a:.{2}f}x {b:+.{2}f}')
+plt.legend()
+plt.xlabel(r'$V_{kin}$ (days)', fontsize=20)
+plt.ylabel(r'$H_{kin}$ (days)', fontsize=20)
+plt.savefig(DIR_OUTPUT + 'multi_berry_hist_cor2.png', bbox_inches='tight')
 
 # ===== area = f(t) ==================================================================================================
 

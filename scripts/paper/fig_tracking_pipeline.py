@@ -75,7 +75,6 @@ for i in range(len(M)):
         elif i > j:
             M2[i, j] = np.min(M[i, j][[1, 2]])
 
-# TODO : plot matrix so that [i,j] means cpd(i -> j): m becomes 2d, and not symmetric!
 plt.figure()
 plt.imshow(M2)
 plt.rcParams.update({'font.size': 22})
@@ -83,8 +82,8 @@ set_threshold = 8
 plt.plot(np.where(M2 < set_threshold)[0], np.where(M2 < set_threshold)[1], 'r.', markersize=7)
 cb = plt.colorbar()
 cb.set_label('D($t_i$, $t_j$)', fontsize=25)
-plt.xlabel('$t_i$', fontsize=35)
-plt.ylabel('$t_j$', fontsize=35)
+plt.xlabel('$i$', fontsize=35)
+plt.ylabel('$j$', fontsize=35)
 
 # ===== CPD example ==================================================================================================
 

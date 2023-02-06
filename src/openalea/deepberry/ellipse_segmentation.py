@@ -38,12 +38,12 @@ def berry_detection(image, model, max_box_size=150, score_threshold=0.985, ratio
                     res.append([x + x_corner, y + y_corner, w, h, score])
     res = pd.DataFrame(res, columns=['x', 'y', 'w', 'h', 'score'])
 
-    res_nms = nms(res, nms_threshold=nms_threshold)
+    res = nms(res, nms_threshold=nms_threshold, ellipse=False)
 
-    return res_nms
+    return res
 
 
-def berry_segmentation(image, model, boxes):
+def berry_segmentation(image, model, boxes, nms_threshold_ell=0.7):
 
     ds = int(VIGNETTE_SIZE_SEG / 2)
 
@@ -66,8 +66,6 @@ def berry_segmentation(image, model, boxes):
             seg_vignette = cv2.resize(image[ya:yb, xa:xb], (VIGNETTE_SIZE_SEG, VIGNETTE_SIZE_SEG))
             seg_vignette = (seg_vignette / 255.).astype(np.float64)
             seg_vignettes[row_index] = seg_vignette
-        else:
-            print('not enough space')
 
     if seg_vignettes:
 
@@ -87,7 +85,6 @@ def berry_segmentation(image, model, boxes):
             edges, _ = cv2.findContours(seg, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             if edges:
                 edges = edges[np.argmax([len(e) for e in edges])][:, 0, :]  # takes longest contour if several areas
-            # edges = np.array(np.where(seg == 255))[::-1].T
 
             if len(edges) >= 5:  # cv2.fitEllipse() requires >= 5 points
 
@@ -101,10 +98,9 @@ def berry_segmentation(image, model, boxes):
 
                 res.append([ell_x_raw, ell_y_raw, ell_w_raw, ell_h_raw, ell_a_raw, score])
 
-            else:
-                print('len(edges) < 5')
-
     res = pd.DataFrame(res, columns=['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a', 'score'])
+
+    res = nms(res, nms_threshold=nms_threshold_ell, ellipse=True)
 
     return res
 

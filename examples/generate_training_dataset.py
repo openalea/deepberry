@@ -1,1 +1,0 @@
-# TODO 2 images train + 1 image test. not ZA22.

@@ -2,10 +2,10 @@ import cv2
 import numpy as np
 import pandas as pd
 
-from deepberry.src.openalea.deepberry.detection_and_segmentation import \
+from deepberry.src.openalea.deepberry.ellipse_segmentation import \
     berry_detection, berry_segmentation, load_berry_models
 
-MODEL_DET, MODEL_SEG = load_berry_models('Y:/lepseBinaries/Trained_model/deepberry/new/')
+MODEL_DET, MODEL_SEG = load_berry_models('Y:/lepseBinaries/Trained_model/deepberry/')
 
 # dir containing image_train, image_valid folders
 DIR_DATASET = 'data/grapevine/dataset/'
@@ -17,50 +17,7 @@ df_annot = pd.read_csv(DIR_DATASET + 'grapevine_annotation.csv')
 DIR_VALIDATION = 'data/grapevine/validation/'
 
 # this parameter is kept fixed for the computation of all metrics
-IOU_THRESHOLD = 0.75  # match between box1 and box2 if iou(box1, box2) > IOU_THRESHOLD
-
-# =====================================================================================================================
-
-"""
-Backup8: best_iteration = 16_000
-"""
-
-# backup_fd = 'data/grapevine/validation/backup8/'
-#
-# iterations = [f.split('_')[1].split('.')[0] for f in os.listdir(backup_fd)]
-# iterations = sorted([int(iter) for iter in iterations if iter.isdigit()])
-# iterations = [i for i in iterations if i > 5000]
-#
-# df_res_brut = []
-# for k_image, image_name in enumerate(df_annot[df_annot['dataset'] == 'valid']['image_name'].unique()):
-#
-#     obs = df_annot[df_annot['image_name'] == image_name]
-#     img = cv2.cvtColor(cv2.imread('data/grapevine/dataset/image_valid/' + image_name), cv2.COLOR_BGR2RGB)
-#
-#     for iteration in iterations:
-#
-#         # yolov4 trained model
-#         config_path = 'deepberry/scripts/model_training/detection.cfg'
-#         weights_path = 'data/grapevine/validation/backup8/detection_{}.weights'.format(iteration)
-#         net = cv2.dnn.readNetFromDarknet(config_path, weights_path)
-#         model = cv2.dnn_DetectionModel(net)
-#
-#         t0 = time.time()
-#         pred = detect_berry(image=img, model=model, score_threshold=0.)
-#         print(k_image, iteration, round(time.time() - t0, 1))
-#
-#         for _, row in obs.iterrows():
-#             x, y, w, h = row[['box_x', 'box_y', 'box_w', 'box_h']]
-#             x, y = x - w / 2, y - h / 2
-#             df_res_brut.append([iteration, 'obs', x, y, x + w, y + h, 1, image_name])
-#
-#         for _, row in pred.iterrows():
-#             x, y, w, h, score = row
-#             df_res_brut.append([iteration, 'pred', x, y, x + w, y + h, score, image_name])
-#
-# df_res_brut = pd.DataFrame(df_res_brut, columns=['iteration', 'type', 'x1', 'y1', 'x2', 'y2', 'score', 'image_name'])
-#
-# df_res_brut.to_csv('data/grapevine/validation/validation_backup8_new.csv', index=False)
+IOU_THRESHOLD = 0.5  # match between box1 and box2 if iou(box1, box2) > IOU_THRESHOLD
 
 # ===== run detection on validation set (no score_threshold) ==========================================================
 

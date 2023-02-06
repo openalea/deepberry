@@ -15,7 +15,7 @@ exp, plantid, task, angle = 'ARCH2021-05-27', 7794, 3786, 210
 
 # ===== load image from index and run the pipeline on it ==============================================================
 
-from deepberry.src.openalea.deepberry.detection_and_segmentation import berry_detection, berry_segmentation, load_berry_models
+from deepberry.src.openalea.deepberry.ellipse_segmentation import berry_detection, berry_segmentation, load_berry_models
 
 index = pd.read_csv('data/grapevine/image_index.csv')
 index = index[index['imgangle'].notnull()]

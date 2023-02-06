@@ -2,15 +2,17 @@ import cv2
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.metrics import r2_score
+from scipy.stats import linregress
 
-# https://github.com/yfpeng/object_detection_metrics
-# (which is adapted from https://github.com/rafaelpadilla/Object-Detection-Metrics)
+from deepberry.src.openalea.deepberry.utils import ellipse_interpolation
+
+# podm : https://github.com/yfpeng/object_detection_metrics (pip install object_detection_metrics)
+# (adapted from https://github.com/rafaelpadilla/Object-Detection-Metrics)
 from podm.metrics import get_pascal_voc_metrics, BoundingBox
 from podm.box import intersection_over_union
 
 
-IOU_THRESHOLD = 0.75
+IOU_THRESHOLD = 0.5
 
 DIR_VALIDATION = 'data/grapevine/validation/'
 
@@ -36,21 +38,6 @@ def get_metrics(df, iou_threshold):
     pd_BoundingBoxes = get_boxes(df[df['type'] == 'pred'])
     res = get_pascal_voc_metrics(gt_BoundingBoxes, pd_BoundingBoxes, iou_threshold)['berry']
     return res
-
-
-# def IOU(pol1_xy, pol2_xy):
-#     """
-#     https://stackoverflow.com/questions/58435218/intersection-over-union-on-non-rectangular-quadrilaterals
-#     """
-#     # Define each polygon
-#     polygon1_shape = Polygon(pol1_xy)
-#     polygon2_shape = Polygon(pol2_xy)
-#
-#     # Calculate intersection and union, and the IOU
-#     polygon_intersection = polygon1_shape.intersection(polygon2_shape).area
-#     polygon_union = polygon1_shape.area + polygon2_shape.area - polygon_intersection
-#     return polygon_intersection / polygon_union
-
 
 # ===== detection metrics =============================================================================================
 
@@ -125,6 +112,7 @@ for image_name in val_seg['image_name'].unique():
     obs_box = get_boxes(obs)
     pred_box = get_boxes(pred)
     n += len(pred_box)
+    # TODO for obs not pred (see below)
     for k2, box2 in enumerate(pred_box):
         iou_list = [intersection_over_union(box1, box2) for box1 in obs_box]
         if max(iou_list) > IOU_THRESHOLD:  # filter couples that are not close enough to be considered as a match
@@ -141,7 +129,7 @@ x = np.array([row[var] for row, _ in selec_box_couples])
 y = np.array([row[var] for _, row in selec_box_couples])
 
 rmse = np.sqrt(np.sum((x - y) ** 2) / len(x))
-r2 = r2_score(x, y)
+r2 = linregress(x, y)[2] ** 2
 bias = np.mean(y - x)
 mape = 100 * np.mean(np.abs((x - y) / x))
 
@@ -160,3 +148,70 @@ plt.text(0.52, 0.03, f'n = {len(x)} \nR² = {r2:.3f} \nRMSE = {rmse:.1f}px² \nB
          horizontalalignment='left', verticalalignment='bottom', transform=ax.transAxes, fontsize=30)
 
 plt.savefig(DIR_OUTPUT + 'val_seg.png', bbox_inches='tight')
+
+# ===== further exploration of detection errors =======================================================================
+
+# load det + seg validation dataset
+val_seg = pd.read_csv(DIR_VALIDATION + 'validation_segmentation.csv')
+
+image_names = ['DYN2020-05-15_7233_2424_330.png', 'ARCH2021-05-27_7772_3793_30.png', 'ARCH2021-05-27_7783_3942_0.png',
+               'ARCH2022-05-18_1715_5899_0.png', 'ARCH2022-05-18_2448_6054_60.png', 'DYN2020-05-15_7232_2656_330.png',
+               'DYN2020-05-15_7236_2530_330.png', 'DYN2020-05-15_7238_2388_330.png', 'DYN2020-05-15_7236_2530_330.png',
+               'ARCH2022-05-18_1685_5601_180.png', 'ARCH2021-05-27_7788_3785_270.png']
+
+n_fn, n_fp = 0, 0
+for image_name in image_names:
+
+    dfn = val_seg[val_seg['image_name'] == image_name]
+
+    # generate couples of (obs, pred) for seg validation
+    box_couples = []
+    n, tp = 0, 0
+
+    obs, pred = dfn[dfn['type'] == 'obs'], dfn[dfn['type'] == 'pred']
+    obs_box = get_boxes(obs)
+    pred_box = get_boxes(pred)
+    i_fn, i_tp = [], []
+    for k1, box1 in enumerate(obs_box):
+        iou_list = [intersection_over_union(box1, box2) for box2 in pred_box]
+        if max(iou_list) > IOU_THRESHOLD:  # filter couples that are not close enough to be considered as a match
+            # a pred was found as a match for this obs : TP
+            i_tp.append(np.argmax(iou_list))
+        else:
+            # no pred was found for this obs : FN
+            i_fn.append(k1)
+
+    # if a pred is not a TP, it is a FP
+    i_fp = [i for i in range(len(pred_box)) if i not in i_tp]
+
+    # visu
+    img = cv2.cvtColor(cv2.imread('data/grapevine/dataset/image_valid/' + image_name), cv2.COLOR_BGR2RGB)
+    plt.figure(image_name)
+    plt.imshow(img)
+    # for _, row in dfn.iterrows():
+    #     col = 'greenyellow' if row['type'] == 'obs' else 'r'
+    #     linestyle = '--' if row['type'] == 'obs' else '-'
+    #     linewidth = 1. if row['type'] == 'obs' else 1.6
+    #     x1, x2, y1, y2 = row[['x1', 'x2', 'y1', 'y2']]
+    #     plt.plot([x1, x1, x2, x2, x1], [y1, y2, y2, y1, y1], linestyle=linestyle, linewidth=linewidth, color=col)
+    #     # xe, ye, we, he, ae = row[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
+    #     # lsp_x, lsp_y = ellipse_interpolation(x=xe, y=ye, w=we, h=he, a=ae, n_points=50)
+    #     # plt.plot(lsp_x, lsp_y, linestyle=linestyle, linewidth=linewidth, color=col)
+
+    for i in i_fn:
+        row = obs.iloc[i]
+        xe, ye, we, he, ae = row[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
+        lsp_x, lsp_y = ellipse_interpolation(x=xe, y=ye, w=we, h=he, a=ae, n_points=50)
+        plt.plot(lsp_x, lsp_y, '-', color=('greenyellow' if row['type'] == 'obs' else 'r'))
+
+    for i in i_fp:
+        row = pred.iloc[i]
+        xe, ye, we, he, ae = row[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
+        lsp_x, lsp_y = ellipse_interpolation(x=xe, y=ye, w=we, h=he, a=ae, n_points=50)
+        plt.plot(lsp_x, lsp_y, '-', color=('greenyellow' if row['type'] == 'obs' else 'r'))
+
+    n_fn += len(i_fn)
+    n_fp += len(i_fp)
+
+
+

@@ -51,15 +51,18 @@ for k_img, image_name in enumerate(image_names):
     fig, ax = plt.subplots()
     plt.imshow(img)
     for _, row in s_seg.iterrows():
-        col = 'greenyellow' if row['type'] == 'obs' else 'r'
-        linestyle = '--' if row['type'] == 'obs' else '-'
-        linewidth = 1.7 if row['type'] == 'obs' else 1.
-        # if row['type'] == 'pred':
-        #     x1, x2, y1, y2 = row[['x1', 'x2', 'y1', 'y2']]
-        #     plt.plot([x1, x1, x2, x2, x1], [y1, y2, y2, y1, y1], linestyle=linestyle, linewidth=linewidth, color=col)
-        x, y, w, h, a = row[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
-        lsp_x, lsp_y = ellipse_interpolation(x=x, y=y, w=w, h=h, a=a, n_points=100)
-        plt.plot(lsp_x, lsp_y, linestyle=linestyle, linewidth=linewidth, color=col)
+
+        if row['type'] == 'pred':
+
+            col = 'greenyellow' if row['type'] == 'obs' else 'r'
+            linestyle = '--' if row['type'] == 'obs' else '-'
+            linewidth = 1.7 if row['type'] == 'obs' else 2.7
+            # if row['type'] == 'pred':
+            #     x1, x2, y1, y2 = row[['x1', 'x2', 'y1', 'y2']]
+            #     plt.plot([x1, x1, x2, x2, x1], [y1, y2, y2, y1, y1], linestyle=linestyle, linewidth=linewidth, color=col)
+            x, y, w, h, a = row[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
+            lsp_x, lsp_y = ellipse_interpolation(x=x, y=y, w=w, h=h, a=a, n_points=100)
+            plt.plot(lsp_x, lsp_y, linestyle=linestyle, linewidth=linewidth, color=col)
 
     x0, y0 = xy[image_name]
     plt.xlim((x0, x0 + 500))

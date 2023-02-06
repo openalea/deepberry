@@ -7,14 +7,14 @@ import pandas as pd
 import numpy as np
 from multiprocessing import Pool
 
-from deepberry.src.openalea.deepberry.detection_and_segmentation import \
+from deepberry.src.openalea.deepberry.ellipse_segmentation import \
     berry_detection, berry_segmentation, load_berry_models
 from deepberry.src.openalea.deepberry.features_extraction import berry_features_extraction
 from deepberry.src.openalea.deepberry.temporal import distance_matrix, points_sets_alignment
 
 DIR_INDEX = '/home/daviet/deepberry_data/'
 DIR_CACHE = '/mnt/data/phenoarch_cache/'
-DIR_MODEL = '/mnt/phenomixNasShare/lepseBinaries/Trained_model/deepberry/new/'
+DIR_MODEL = '/mnt/phenomixNasShare/lepseBinaries/Trained_model/deepberry/'
 DIR_IMAGE = '/mnt/phenomixNas/'
 
 MODEL_DET, MODEL_SEG = load_berry_models(DIR_MODEL)

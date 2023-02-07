@@ -234,8 +234,26 @@ for time_period in [None]:
         # df.to_csv(PATH_CACHE + 'cache_{0}/full_results_period{1}_{0}.csv'.format(exp, period), index=False)
     df.to_csv(DIR_CACHE + 'cache_{0}/full_results_{1}_{0}{2}.csv'.format(exp, step, time_period_str), index=False)
 
-# =====================================================================================================================
+# ===== update features ===============================================================================================
 
+exp = 'DYN2020-05-15'
+fd = DIR_CACHE + 'cache_{}/temporal'.format(exp)
+for plantid_str in os.listdir(fd):
+    for f in os.listdir(fd + '/' + plantid_str):
+        angle = int(f.split('.')[0])
+        df = pd.read_csv(files[0])
+        for task in df['task'].unique():
+            s = df[df['task'] == task]
+            row_index = selec[(selec['exp'] == exp) & (selec['plantid'] == int(plantid_str)) &
+                            (selec['imgangle'] == angle) & (selec['taskid'] == task)].iloc[0]
+            img_path = DIR_IMAGE + '{}/{}/{}.png'.format(exp, task, row_index['imgguid'])
+            img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
+
+            # cv2.imwrite('test.png', cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+
+            s_new = berry_features_extraction(image=img, ellipses=s)
+
+# =====================================================================================================================
 
 # for exp in ['DYN2020-05-15', 'ARCH2021-05-27', 'ARCH2022-05-18']:
 

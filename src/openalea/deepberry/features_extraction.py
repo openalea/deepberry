@@ -50,7 +50,7 @@ def berry_features_extraction(image, ellipses, edge_spacing=3, remove_overlap=Tr
             pixels = px_nonoverlap if len(px_nonoverlap) / len(pixels) > 0.2 else pixels
 
         pixels_hsv = cv2.cvtColor(np.array([pixels]), cv2.COLOR_RGB2HSV)[0]
-        pixels_hue = pixels_hsv[:, 0]
+        pixels_hue = np.array(pixels_hsv[:, 0])
         pixels_hue_rescaled = ((180 - pixels_hue) - 100) % 180
         hues_mean.append(circmean(pixels_hue_rescaled, low=0, high=180))
         hues_std.append(circstd(pixels_hue_rescaled, low=0, high=180))

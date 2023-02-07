@@ -32,6 +32,34 @@ if exp == 'DYN2020-05-15':
 # generated with berry_filtering.py
 df_berry = pd.read_csv('data/grapevine/berry_filter.csv')
 
+# TODO remove
+plantid = 7232
+angle = 330
+df_berry = df_berry[df_berry['angle'] == angle]
+index = pd.read_csv('data/grapevine/image_index.csv')
+index = index[index['imgangle'].notnull()]
+s_index = index[(index['plantid'] == plantid) & (index['imgangle'] == angle)]
+s_index['t'] = (s_index['timestamp'] - min(res['timestamp'])) / 3600 / 24
+s_index = s_index[(s_index['t'] > 15) & (s_index['t'] < 16.5)]
+for _, row_index in s_index.iterrows():
+    task = row_index['taskid']
+    if task in [2513, 2514]:
+        img_path = 'Z:/{}/{}/{}.png'.format(row_index['exp'], task, row_index['imgguid'])
+        img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
+        plt.figure(str(round(row_index['t'], 3)))
+        plt.title(row_index['taskid'])
+        plt.imshow(img)
+
+        s = res[(res['plantid'] == plantid) & (res['angle'] == angle) & (res['task'] == task)]
+        print(row_index['taskid'], np.median(s['area']))
+
+        plt.xlim((800, 1000))
+        plt.ylim((1000, 800))
+        for _, row in s.iterrows():
+            x, y, w, h, a = row[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
+            lsp_x, lsp_y = ellipse_interpolation(x=x, y=y, w=w, h=h, a=a, n_points=100)
+            plt.plot(lsp_x, lsp_y, 'r-')
+
 # ===== one berry as example ==========================================================================================
 
 plantid, angle, berryid = 7232, 0, 28
@@ -111,7 +139,7 @@ plantid = 7232
 selec = res[res['plantid'] == plantid]
 df_berry_selec = df_berry[df_berry['plantid'] == plantid]
 
-do_x_scaling = True
+do_x_scaling = False
 
 hists = {'v0': [], 'vmax': [], 't_v': [], 'kin_v': [],
          'h0': [], 'hn': [], 't_h': [], 'kin_h': []}
@@ -214,7 +242,7 @@ for var in ['volume', 'hue_scaled', 'both']:
         else:
             x_plot, y_plot = x_scaled[var], y_scaled[var]
 
-        plt.plot(x_plot, y_plot, '-', color='grey', linewidth=0.6, alpha=0.6)
+        plt.plot(x_plot, y_plot, '.-', color='grey', linewidth=0.6, alpha=0.6)
 
         # x-scaling means that measurements are not at the same timings anymore across berries. So interpolation is
         # necessary. (Here, it's chosen to interpolate through all x-int values across the berry range)

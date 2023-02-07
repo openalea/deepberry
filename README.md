@@ -5,7 +5,7 @@
     # for prediction
     conda create -n grapevine -c conda-forge python=3.7 tensorflow
     conda activate grapevine
-    conda install -c conda-forge -c numpy pandas scipy tensorflow matplotlib shapely
+    conda install -c conda-forge -c numpy pandas scipy tensorflow matplotlib shapely pytest
     pip install opencv-contrib-python
     pip install pycpd
 

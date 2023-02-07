@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from scipy.stats import circmean
+from scipy.stats import circmean, circstd
 
 
 def round_up_to_odd(f):
@@ -16,7 +16,7 @@ def berry_features_extraction(image, ellipses, edge_spacing=3, remove_overlap=Tr
 
     # ==== color faster ===============================================================================================
 
-    hues = []
+    hues_mean, hues_std, hues_50 = [], [], []
 
     vignettes_data = []
     ellipses_overlap = np.zeros((image.shape[0], image.shape[1]))
@@ -26,8 +26,6 @@ def berry_features_extraction(image, ellipses, edge_spacing=3, remove_overlap=Tr
         w2, h2 = w - (2 * e), h - (2 * e)
         vig_size = round_up_to_odd(h2)
 
-        # c1 = vig_size < 2 * min((x, image.shape[1] - x))
-        # c2 = vig_size < 2 * min((y, image.shape[0] - y))
         # border conditions: reduce vig_size value if the corresponding vignette goes beyond the image edges
         vig_size = min(vig_size, int(2 * min((y, image.shape[0] - y))), int(2 * min((x, image.shape[1] - x))))
 
@@ -36,7 +34,9 @@ def berry_features_extraction(image, ellipses, edge_spacing=3, remove_overlap=Tr
 
         # it's much faster to run cv2.ellipse() on a small subset of the image
         vignette_mask = cv2.ellipse(np.float32(vignette[:, :, 0] * 0),
-                           (round(x - vig_x), round(y - vig_y)), (round(w2 / 2), round(h2 / 2)), a, 0., 360, (1), -1)
+                                    (round(x - vig_x), round(y - vig_y)),
+                                    (round(w2 / 2), round(h2 / 2)),
+                                    a, 0., 360, (1), -1)
 
         ellipses_overlap[vig_y:(vig_y + vig_size), vig_x:(vig_x + vig_size)][vignette_mask == 1] += 1
 
@@ -50,10 +50,17 @@ def berry_features_extraction(image, ellipses, edge_spacing=3, remove_overlap=Tr
             pixels = px_nonoverlap if len(px_nonoverlap) / len(pixels) > 0.2 else pixels
 
         pixels_hsv = cv2.cvtColor(np.array([pixels]), cv2.COLOR_RGB2HSV)[0]
-        hue = circmean(pixels_hsv[:, 0], low=0, high=180)
-        hues.append(hue)
+        pixels_hue = pixels_hsv[:, 0]
+        pixels_hue_rescaled = ((180 - pixels_hue) - 100) % 180
+        hues_mean.append(circmean(pixels_hue_rescaled, low=0, high=180))
+        hues_std.append(circstd(pixels_hue_rescaled, low=0, high=180))
+        hues_50.append(np.sum(pixels_hue_rescaled > 50) / len(pixels_hue_rescaled))
 
-    res['hue_scaled'] = ((180 - np.array(hues)) - 100) % 180
+    # res['hue_scaled'] = ((180 - np.array(hues_mean)) - 100) % 180
+    # res['hue_scaled_std'] = ((180 - np.array(hues_std)) - 100) % 180
+    res['hue_scaled'] = hues_mean
+    res['hue_scaled_std'] = hues_std
+    res['hue_scaled_above50'] = hues_50
 
     # ===== other features ============================================================================================
 

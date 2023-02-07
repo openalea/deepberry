@@ -7,6 +7,15 @@ def round_up_to_odd(f):
     return int(np.ceil(f) // 2 * 2 + 1)
 
 
+# # TODO remove
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# image = cv2.cvtColor(cv2.imread('test.png'), cv2.COLOR_BGR2RGB)
+# ellipses = pd.read_csv('test.csv')
+# plt.imshow(image)
+# plt.plot(ellipses['ell_x'], ellipses['ell_y'], 'ro')
+
+
 def berry_features_extraction(image, ellipses, edge_spacing=3, remove_overlap=True):
     """
     edge_spacing : number of pixels removed along ellipse edges
@@ -50,7 +59,7 @@ def berry_features_extraction(image, ellipses, edge_spacing=3, remove_overlap=Tr
             pixels = px_nonoverlap if len(px_nonoverlap) / len(pixels) > 0.2 else pixels
 
         pixels_hsv = cv2.cvtColor(np.array([pixels]), cv2.COLOR_RGB2HSV)[0]
-        pixels_hue = np.array(pixels_hsv[:, 0])
+        pixels_hue = np.array(pixels_hsv[:, 0]).astype(int)  # np.uint8 -> int to avoid strange behavior after
         pixels_hue_rescaled = ((180 - pixels_hue) - 100) % 180
         hues_mean.append(circmean(pixels_hue_rescaled, low=0, high=180))
         hues_std.append(circstd(pixels_hue_rescaled, low=0, high=180))

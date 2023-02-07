@@ -15,7 +15,7 @@ index = pd.read_csv('data/grapevine/image_index.csv')
 exp = 'DYN2020-05-15'
 # exp = 'ARCH2021-05-27'
 
-res = pd.read_csv('X:/phenoarch_cache/cache_{0}/full_results_{0}.csv'.format(exp))
+res = pd.read_csv('X:/phenoarch_cache/cache_{0}/full_results_temporal_{0}.csv'.format(exp))
 
 # =================================================================================================================
 
@@ -23,7 +23,7 @@ n_frames = np.max(res.groupby('plantid')['task'].nunique())
 
 # for plantid in res_selec['plantid'].unique():
 
-plantid = 7233
+plantid = 7243
 
 # for plantid in res['plantid'].unique():
 
@@ -44,7 +44,7 @@ for angle in selec0['angle'].unique():
     selec_index = index[(index['exp'] == exp) & (index['plantid'] == int(plantid)) & (index['imgangle'] == int(angle))]
 
     imgs = []
-    tasks = list(selec.groupby('task')['t'].mean().sort_values().index)
+    tasks = list(selec.groupby('task')['timestamp'].mean().sort_values().index)
     for i_task, task in enumerate(tasks[::1]):
         print(i_task)
         s = selec[selec['task'] == task]

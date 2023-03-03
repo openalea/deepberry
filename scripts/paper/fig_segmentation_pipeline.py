@@ -58,8 +58,8 @@ for (x_subvig, y_subvig) in xy_subvignettes:
 
 # detection vignette
 # w, px_spacing = 416, 270
-# Y = list(np.arange(0, img.shape[0] - w, px_spacing)) + [img.shape[0] - w]
-# X = list(np.arange(0, img.shape[1] - w, px_spacing)) + [img.shape[1] - w]
+# Y = list(np.arange(0, image.shape[0] - w, px_spacing)) + [image.shape[0] - w]
+# X = list(np.arange(0, image.shape[1] - w, px_spacing)) + [image.shape[1] - w]
 img0 = img.copy()
 for (x, y) in xy_vignettes:
     img0 = cv2.rectangle(img0, (round(x), round(y)), (round(x + 416), round(y + 416)), (0, 0, 255), 12)

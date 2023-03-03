@@ -87,7 +87,7 @@ plt.ylabel('$j$', fontsize=35)
 
 # ===== CPD example ==================================================================================================
 
-from deepberry.src.openalea.deepberry.temporal import scaled_cpd
+from deepberry.src.openalea.deepberry.temporal import point_sets_registration
 
 points_sets = [np.array(selec_ell[selec_ell['task'] == task][['ell_x', 'ell_y']]) for task in tasks]
 
@@ -95,7 +95,7 @@ t1 = 47
 t2 = 15
 
 set1, set2 = points_sets[t1], points_sets[t2]
-set2_bis = scaled_cpd(set1, set2, transformation='affine')
+set2_bis = point_sets_registration(set1, set2, transformation='affine')
 all = np.concatenate((set1, set2, set2_bis))
 
 
@@ -124,7 +124,7 @@ print(d)
 
 # ===== tree =========================================================================================================
 
-from deepberry.src.openalea.deepberry.temporal import pairs_order
+from deepberry.src.openalea.deepberry.temporal import tree_order
 
 M = np.load('X:/phenoarch_cache/cache_{}_NEW/distance_matrix/{}/{}.npy'.format(exp, plantid, angle))
 points_sets = [np.array(selec_ell[selec_ell['task'] == task][['ell_x', 'ell_y']]) for task in tasks]
@@ -132,14 +132,14 @@ set_threshold = 8
 
 t_best, k_max = None, float('-inf')
 for t_start in range(len(points_sets)):
-    sets_pairs = pairs_order(M, i_start=t_start, threshold=set_threshold)
+    sets_pairs = tree_order(M, i_start=t_start, threshold=set_threshold)
     k_above = [k for k, (i, j) in enumerate(sets_pairs) if np.min(M[i, j]) > set_threshold]
     k_fail = len(points_sets) - 1 if not k_above else k_above[0]
     if k_fail > k_max:
         t_best, k_max = t_start, k_fail
 t_start = t_best
 
-sets_pairs = pairs_order(M, i_start=t_start, threshold=set_threshold)
+sets_pairs = tree_order(M, i_start=t_start, threshold=set_threshold)
 
 
 

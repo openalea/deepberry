@@ -10,7 +10,7 @@ from multiprocessing import Pool
 from deepberry.src.openalea.deepberry.ellipse_segmentation import \
     berry_detection, berry_segmentation, load_berry_models
 from deepberry.src.openalea.deepberry.features_extraction import berry_features_extraction
-from deepberry.src.openalea.deepberry.temporal import distance_matrix, points_sets_alignment
+from deepberry.src.openalea.deepberry.temporal import distance_matrix, tracking
 
 DIR_INDEX = '/home/daviet/deepberry_data/'
 DIR_CACHE = '/mnt/data/phenoarch_cache/'
@@ -158,7 +158,7 @@ def run_one_plant_temporal(meta):
     if len(points_sets) != len(M):
         print('wrong matrix size !', plantid)
 
-    berry_ids = points_sets_alignment(points_sets=points_sets, dist_mat=M)
+    berry_ids = tracking(points_sets=points_sets, dist_mat=M)
     for k in range(len(ellipses_sets)):
         ellipses_sets[k].loc[:, 'berryid'] = berry_ids[k]
         ellipses_sets[k].loc[:, 'task'] = tasks[k]
@@ -187,9 +187,9 @@ mp_full_exp(metas)
 
 # TODO add t column ?
 
-# exp = 'DYN2020-05-15'
+exp = 'DYN2020-05-15'
 # exp = 'ARCH2021-05-27'
-exp = 'ARCH2022-05-18'
+# exp = 'ARCH2022-05-18'
 
 # for step in ['segmentation', 'temporal']:
 step = 'temporal'
@@ -237,7 +237,7 @@ for time_period in [None]:
 # ===== update features ===============================================================================================
 
 exp = 'DYN2020-05-15'
-fd = DIR_CACHE + 'cache_{}/temporal'.format(exp)
+fd = DIR_CACHE + 'cache_{}/temporal_old'.format(exp)
 
 for plantid_str in os.listdir(fd):
     plantid = int(plantid_str)
@@ -246,8 +246,9 @@ for plantid_str in os.listdir(fd):
         angle = int(f.split('.')[0])
         df = pd.read_csv(fd + '/' + plantid_str + '/' + f)
 
+        print(plantid, angle)
+
         for task in df['task'].unique():
-            pass
 
             s = df[df['task'] == task]
 
@@ -256,51 +257,16 @@ for plantid_str in os.listdir(fd):
             img_path = DIR_IMAGE + '{}/{}/{}.png'.format(exp, task, row_index['imgguid'])
             img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
 
-            cv2.imwrite('test.png', cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
-            s.to_csv('test.csv')
-
             s_new = berry_features_extraction(image=img, ellipses=s)
 
-# TODO test modulor
-imgname = 'DYN2020-05-15/2641/a66d5255-5cc0-4652-ad25-e5669f19987e.png'
-img = cv2.cvtColor(cv2.imread('/mnt/phenomixNas/' + imgname), cv2.COLOR_BGR2RGB)
-print(img[0], np.mean(img))
+            df.loc[s.index, 'hue_scaled'] = s_new['hue_scaled']
+            df.loc[s.index, 'hue_scaled_std'] = s_new['hue_scaled_std']
+            df.loc[s.index, 'hue_scaled_above50'] = s_new['hue_scaled_above50']
 
-# TODO test local
-imgname = 'DYN2020-05-15/2641/a66d5255-5cc0-4652-ad25-e5669f19987e.png'
-img = cv2.cvtColor(cv2.imread('Z:/' + imgname), cv2.COLOR_BGR2RGB)
-print(img[0], np.mean(img))
-
-# TODO remove local
-import pandas as pd
-import cv2
-import matplotlib.pyplot as plt
-s = pd.read_csv('test.csv')
-img = img = cv2.cvtColor(cv2.imread('test.png'), cv2.COLOR_BGR2RGB)
-plt.figure()
-plt.imshow(img)
-plt.plot(s['ell_x'], s['ell_y'], 'ro')
-
-
-# TODO ????
-exp = 'DYN2020-05-15'
-plantid = 7243
-angle = 180
-task = 2641
-df = pd.read_csv('X:/phenoarch_cache/cache_{}/temporal/{}/{}.csv'.format(exp, plantid, angle))
-s = df[df['task'] == task]
-
-index = pd.read_csv('data/grapevine/image_index.csv')
-index = index[index['imgangle'].notnull()]
-row_index = index[(index['exp'] == exp) & (index['plantid'] == plantid) &
-                  (index['imgangle'] == angle) & (index['taskid'] == task)].iloc[0]
-
-img_path = 'Z:/{}/{}/{}.png'.format(exp, task, row_index['imgguid'])
-img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
-plt.figure()
-plt.imshow(img)
-plt.plot(s['ell_x'], s['ell_y'], 'ro')
-
+        new_folder = DIR_CACHE + 'cache_{}/temporal/{}'.format(exp, plantid)
+        if not os.path.isdir(new_folder):
+            os.makedirs(new_folder)
+        df.to_csv(new_folder + '/' + f, index=False)
 
 # =====================================================================================================================
 

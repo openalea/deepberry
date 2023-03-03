@@ -13,6 +13,10 @@ for exp in ['DYN2020-05-15', 'ARCH2021-05-27']:
     print(exp, np.mean(dt), np.median(dt))
 
 # ===== tracking performance = f(dt) ==================================================================================
+"""
+- Only on best angle
+- Mean of plant means
+"""
 
 df = []
 for exp in ['DYN2020-05-15', 'ARCH2021-05-27']:
@@ -22,13 +26,17 @@ for exp in ['DYN2020-05-15', 'ARCH2021-05-27']:
         print(period, len(res))
 
         for plantid in res['plantid'].unique():
-            for angle in [k * 30 for k in range(12)]:
-                s = res[(res['plantid'] == plantid) & (res['angle'] == angle)]
-                dt = np.mean(np.diff(sorted(s.groupby('task')['timestamp'].mean())) / 3600)
-                acc = np.sum(s['berryid'] != -1) / len(s)
-                df.append([period, dt, exp, plantid, angle, acc])
+            s0 = res[res['plantid'] == plantid]
+            angle = s0.groupby('angle').size().sort_values().index[-1]
+            s = s0[s0['angle'] == angle]
+            dt = np.mean(np.diff(sorted(s.groupby('task')['timestamp'].mean())) / 3600)
+            acc = np.sum(s['berryid'] != -1) / len(s)
+            df.append([period, dt, exp, plantid, angle, acc])
 
 df = pd.DataFrame(df, columns=['period', 'dt', 'exp', 'plantid', 'angle', 'acc'])
+
+# for the paper
+print(df.groupby(['exp', 'plantid', 'period']).mean().reset_index().groupby(['exp', 'period']).mean())
 
 boxplots = {k * 8: list(df[df['period'] == k]['acc'] * 100) for k in TIME_PERIODS}
 

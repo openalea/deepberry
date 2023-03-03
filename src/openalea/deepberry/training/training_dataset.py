@@ -1,19 +1,23 @@
+""" functions to train deep-learning models to detect (yolov4) and segment berries """
+
 import json
 
 import cv2
 import numpy as np
 import pandas as pd
 
-from deepberry.src.openalea.deepberry.ellipse_segmentation import VIGNETTE_SIZE_DET, VIGNETTE_SIZE_SEG, \
-    BERRY_SCALING_SEG
-from deepberry.src.openalea.deepberry.utils import ellipse_interpolation
-
+from openalea.deepberry.ellipse_segmentation import VIGNETTE_SIZE_DET, VIGNETTE_SIZE_SEG, BERRY_SCALING_SEG
+from openalea.deepberry.utils import ellipse_interpolation
 
 # ===== data augmentation =============================================================================================
 
 
-def hsv_variation(img, variation=[20, 20, 50]):
-    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+def hsv_variation(image, variation=[20, 20, 50]):
+    """
+    random modifications of hue, saturation and value (hsv) of an image "image", with maximum ranges indicated by
+    "variations"
+    """
+    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
 
     for i, var in enumerate(variation):
         value = np.random.randint(-var, var)
@@ -26,18 +30,18 @@ def hsv_variation(img, variation=[20, 20, 50]):
             hsv[:, :, i][hsv[:, :, i] < lim] = 0
             hsv[:, :, i][hsv[:, :, i] >= lim] -= - value
 
-    img = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
-    return img
+    image = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+    return image
 
 
-def adjust_contrast_brightness(img, contrast:float=1.0, brightness:int=0):
+def adjust_contrast_brightness(image, contrast=1.0, brightness=0):
     """
     Adjusts contrast and brightness of an uint8 image.
     contrast:  float (0.0,  inf) with 1.0 leaving the contrast as is
     brightness: int [-255, 255] with 0 leaving the brightness as is
     """
     b = brightness + int(round(255 * (1 - contrast) / 2))
-    return cv2.addWeighted(img, contrast, img, 0, b)
+    return cv2.addWeighted(image, contrast, image, 0, b)
 
 
 # ===== converting annotations ========================================================================================
@@ -87,10 +91,34 @@ def labelme_json_postprocessing(json_file):
 # ===== training dataset generation ===================================================================================
 
 
-def generate_detection_vignette(image, labels, output_path, target_berry_center=None, random_center_proba=0.1):
-    """" yolov4 object detection """
+def generate_detection_instance(image, labels, dirsave, target_center=None, shift_center=200, random_center_proba=0.1):
+    """
+    Generate a training instance to train a yolov4 object detection model. This instance contains an input sub-part
+    of the image, called a vignette, of shape (VIGNETTE_SIZE_DET, VIGNETTE_SIZE_DET, 3), and an output text containing
+    corresponding box labels. Input and output are saved as .png and .txt files respectively.
 
-    shift_berry_center = 200
+    Parameters
+    ----------
+    image : 3D array
+        Image of a grapevine cluster.
+    labels : pandas.core.frame.DataFrame
+        Each row corresponds to a box label, whose parameters are described by the following columns:
+        "box_x" : box x-center coordinate
+        "box_y" : box y-center coordinate
+        "box_w" : box width
+        "box_h" : box height
+    dirsave : str
+        Where generated input and output are saved.
+    target_center : list of two elements
+        Coordinate used as the center target for vignette cropping.
+    shift_center : int
+        Apply random variations to "target_center" in this range (in pixels).
+    random_center_proba : float
+        Probability that "target_center" will be replaced by a random coordinate. In [0, 1].
+
+    Returns
+    -------
+    """
 
     # determine the center point of the vignette on the image
     if np.random.random() < random_center_proba:
@@ -98,11 +126,10 @@ def generate_detection_vignette(image, labels, output_path, target_berry_center=
         wi = np.random.randint(VIGNETTE_SIZE_DET / 2, image.shape[1] - VIGNETTE_SIZE_DET / 2)
         hi = np.random.randint(VIGNETTE_SIZE_DET / 2, image.shape[0] - VIGNETTE_SIZE_DET / 2)
     else:
-        # close to a berry center
-        x, y = target_berry_center if target_berry_center is not None else \
-            labels.sample()[['box_x', 'box_y']].values[0]
-        xmin, xmax = x - shift_berry_center, x + shift_berry_center
-        ymin, ymax = y - shift_berry_center, y + shift_berry_center
+        # use "target_center"
+        x, y = target_center if target_center is not None else labels.sample()[['box_x', 'box_y']].values[0]
+        xmin, xmax = x - shift_center, x + shift_center
+        ymin, ymax = y - shift_center, y + shift_center
         wi = int(min(max(np.random.randint(xmin, xmax), VIGNETTE_SIZE_DET / 2),
                      image.shape[1] - (VIGNETTE_SIZE_DET / 2)))
         hi = int(min(max(np.random.randint(ymin, ymax), VIGNETTE_SIZE_DET / 2),
@@ -119,7 +146,7 @@ def generate_detection_vignette(image, labels, output_path, target_berry_center=
     vignette = adjust_contrast_brightness(vignette, contrast=contrast)
 
     # random data augmentation flip among 8 possibilities
-    # (It's not clear if it's already implemented in Yolov4...)
+    # (It's not clear if it's already implemented in Yolov4 ?)
     aug = {'horizontal_flip': np.random.choice([True, False]),
            'vertical_flip': np.random.choice([True, False]),
            '90_flip': np.random.choice([True, False])}
@@ -134,11 +161,11 @@ def generate_detection_vignette(image, labels, output_path, target_berry_center=
 
     # create and save the annotation .txt file, with the format needed to train Yolov4
     boxes_in = {}
-    with open(output_path + '.txt', 'w') as out:
+    with open(dirsave + '.txt', 'w') as out:
         for _, row in labels.iterrows():
             x, y, w, h = row['box_x'], row['box_y'], row['box_w'], row['box_h']
 
-            # check if box is // 100% INCLUDED // in the vignette space
+            # check if the box is 100% included in the vignette space
             box_in = wa + w/2 < x < wb - w/2 and ha + h/2 < y < hb - h/2
 
             if box_in:
@@ -161,25 +188,44 @@ def generate_detection_vignette(image, labels, output_path, target_berry_center=
             boxes_in[row.name] = box_in
 
     # save vignette
-    cv2.imwrite(output_path + '.png', cv2.cvtColor(vignette.astype(np.uint8), cv2.COLOR_RGB2BGR))
+    cv2.imwrite(dirsave + '.png', cv2.cvtColor(vignette.astype(np.uint8), cv2.COLOR_RGB2BGR))
 
     return boxes_in
 
 
-def generate_segmentation_vignette(image, label, output_path):
+def generate_segmentation_instance(image, label, dirsave, center_noise=0.1, scale_noise=0.1):
     """
-    image segmentation
-    """
+    Generate a training instance to train a segmentation model. This instance contains an input sub-part of the image,
+    of shape (VIGNETTE_SIZE_SEG, VIGNETTE_SIZE_SEG, 3), and an output binary mask, of shape (VIGNETTE_SIZE_SEG,
+    VIGNETTE_SIZE_SEG). Inputs and outputs are centered around an annotated box with some random noise. They are also
+    rescaled, so that the box represents a similar area in them, using the BERRY_SCALING_SEG parameters.
 
-    shift = 0.1
+    Parameters
+    ----------
+    image : 3D array
+        Image of a grapevine cluster.
+    label : pandas.core.frame.DataFrame
+        Each row corresponds to a berry label, in a box format described by 4 parameters (columns "box_x", "box_y",
+        "box_w", "box_h") and an ellipse format described by 5 parameters (columns "ell_x", "ell_y", "ell_w", "ell_h",
+        "ell_a").
+    dirsave : str
+        Where generated input and output are saved.
+    center_noise : float
+        Parameter quantifying the random noise applied to center the vignettes around the label.
+    scale_noise : float
+        Parameter quantifying the random noise applied to rescale the vignettes.
+
+    Returns
+    -------
+    """
 
     # random shift to the berry center position
-    dx = shift * (2 * np.random.random() - 1) * label['box_w']
-    dy = shift * (2 * np.random.random() - 1) * label['box_h']
+    dx = center_noise * (2 * np.random.random() - 1) * label['box_w']
+    dy = center_noise * (2 * np.random.random() - 1) * label['box_h']
 
     # zoom factor to have a berry with a constant size (with random noise added)
     zoom = (VIGNETTE_SIZE_SEG * BERRY_SCALING_SEG) / max(label[['box_h', 'box_w']])
-    zoom *= (1 + shift * (2 * np.random.random() - 1))
+    zoom *= (1 + scale_noise * (2 * np.random.random() - 1))
 
     # deduce the vignette crop coordinates based on center shift and zoom
     ya = round(label['box_y'] + dy - ((VIGNETTE_SIZE_SEG / 2) / zoom))
@@ -220,9 +266,9 @@ def generate_segmentation_vignette(image, label, output_path):
             input_vignette = cv2.flip(input_vignette, int(do_flip))
             output_vignette = cv2.flip(output_vignette, int(do_flip))
 
-        cv2.imwrite(output_path + 'x.png',
+        cv2.imwrite(dirsave + 'x.png',
                     cv2.cvtColor(input_vignette.astype(np.uint8), cv2.COLOR_RGB2BGR))
-        cv2.imwrite(output_path + 'y.png',
+        cv2.imwrite(dirsave + 'y.png',
                     cv2.cvtColor(output_vignette.astype(np.uint8), cv2.COLOR_RGB2BGR))
 
     return enough_space
@@ -233,12 +279,12 @@ if __name__ == '__main__':
     import os
 
     # dir containing the following folders: image_train, image_valid, label_train, label_valid
-    DIR_DATASET = 'data/grapevine/dataset/'
+    DIR_DATASET = 'data/grapevine/dataset/dataset_raw/'
 
     # ===== 1) merge all berry annotations in an easy-to-use dataframe ================================================
 
     df = []
-    for dataset in ['train', 'valid']:
+    for dataset in ['train', 'valid', 'test']:
 
         anot_files = os.listdir(DIR_DATASET + 'label_{}'.format(dataset))
 
@@ -299,11 +345,11 @@ if __name__ == '__main__':
             # select row from the berry which appears the least amount of time in the vignettes dataset
             row_rarest_berry = anot.sort_values('reps').iloc[0]
 
-            berries_added = generate_detection_vignette(image=images[row_rarest_berry['image_name']],
+            berries_added = generate_detection_instance(image=images[row_rarest_berry['image_name']],
                                                         labels=anot[
                                                             anot['image_name'] == row_rarest_berry['image_name']],
-                                                        target_berry_center=list(row_rarest_berry[['box_x', 'box_y']]),
-                                                        output_path='{}/img{}'.format(saving_path, k_vignette))
+                                                        target_center=list(row_rarest_berry[['box_x', 'box_y']]),
+                                                        dirsave='{}/image{}'.format(saving_path, k_vignette))
 
             # update the counter
             for rowname, added in berries_added.items():
@@ -338,11 +384,9 @@ if __name__ == '__main__':
             for _, row in s.iterrows():
                 for _ in range(n_berry_reps[dataset]):
 
-                    vignette_done = generate_segmentation_vignette(image=image,
+                    vignette_done = generate_segmentation_instance(image=image,
                                                                    label=row,
-                                                                   output_path='{}/{}'.format(saving_path, k_vignette))
+                                                                   dirsave='{}/{}'.format(saving_path, k_vignette))
 
                     if vignette_done:
                         k_vignette += 1
-
-    # =================================================================================================================

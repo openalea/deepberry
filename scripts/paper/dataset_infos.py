@@ -14,6 +14,24 @@ for _, row in df.iterrows():
     genotypes.append(s.iloc[0]['genotype'])
 df['genotype'] = genotypes
 
+# TODO remove test vs valid  # ['ARCH2021-05-27', 'ARCH2022-05-18', 'DYN2020-05-15']
+s = df[df['dataset'] == 'valid']
+names = ['ARCH2021-05-27_7772_3793_30.png', 'ARCH2021-05-27_7760_3986_240.png',
+        'DYN2020-05-15_7238_2388_330.png', 'DYN2020-05-15_7244_2636_330.png',
+        'DYN2020-05-15_7240_2551_330.png', 'ARCH2021-05-27_7783_3942_0.png',
+        'ARCH2021-05-27_7791_3835_300.png']
+s_test = s[(s['exp'] == 'ARCH2022-05-18') | (s['image_name'].isin(names))]
+
+import os
+from shutil import move
+for name in s_test['image_name'].unique():
+    # path1 = 'data/grapevine/dataset/dataset_raw/image_valid/' + name
+    # path2 = 'data/grapevine/dataset/dataset_raw/image_test/' + name
+    # move(path1, path2)
+    path1 = 'data/grapevine/dataset/dataset_raw/label_valid/' + name.replace('.png', '.json')
+    path2 = 'data/grapevine/dataset/dataset_raw/label_test/' + name.replace('.png', '.json')
+    move(path1, path2)
+
 # ===== show info ====================================================================================================
 
 df.groupby('exp')[['plantid', 'genotype', 'image_name']].nunique()

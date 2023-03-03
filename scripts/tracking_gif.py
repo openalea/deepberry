@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import cv2
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 from PIL import Image
 
@@ -23,14 +24,12 @@ n_frames = np.max(res.groupby('plantid')['task'].nunique())
 
 # for plantid in res_selec['plantid'].unique():
 
-plantid = 7243
+for plantid in res['plantid'].unique():
 
-# for plantid in res['plantid'].unique():
+    selec0 = res[res['plantid'] == plantid]
 
-selec0 = res[res['plantid'] == plantid]
-
-# angle = selec0.groupby('angle').size().sort_values().index[-1]
-for angle in selec0['angle'].unique():
+    angle = selec0.groupby('angle').size().sort_values().index[-1]
+    # for angle in selec0['angle'].unique():
 
     selec = selec0[selec0['angle'] == angle]
 
@@ -45,6 +44,21 @@ for angle in selec0['angle'].unique():
 
     imgs = []
     tasks = list(selec.groupby('task')['timestamp'].mean().sort_values().index)
+
+    # distance matrix (numpy format)
+    cmap = cm.get_cmap('viridis')
+    M = np.load('X:/phenoarch_cache/cache_{}/distance_matrix/{}/{}.npy'.format(exp, plantid, angle))
+    cmax = 50
+    np_mat = np.zeros((len(M), len(M), 3))
+    for i in range(len(M)):
+        for j in range(len(M)):
+            d = np.min(M[i, j][[0, 2]]) if i < j else np.min(M[i, j][[1, 2]])
+            col = np.array([255, 255, 255])
+            if d != float('inf'):
+                col_float = min(d, cmax) / cmax  # in [0, 1]
+                col = (np.array(cmap(col_float)[:3]) * 255).astype(int)
+            np_mat[i, j, :] = col
+
     for i_task, task in enumerate(tasks[::1]):
         print(i_task)
         s = selec[selec['task'] == task]
@@ -78,7 +92,7 @@ for angle in selec0['angle'].unique():
         # plt.figure('{}_{}'.format(i_task, task))
         # plt.imshow(img2)
 
-        # img_save = cv2.resize(img, tuple((np.array([2048, 2448]) / 4).astype(int)))
+        # img_save = cv2.resize(image, tuple((np.array([2048, 2448]) / 4).astype(int)))
         # plt.imsave('data/videos/gif_imgs4/{}.png'.format(str(i_task).zfill(3)), img_save)
 
         img = cv2.resize(img, tuple((np.array([2048, 2448]) / 6).astype(int)))
@@ -91,10 +105,16 @@ for angle in selec0['angle'].unique():
 
         img2 = cv2.putText(img2, '{}_{}_{} | t={}/{}'.format(exp, plantid, angle, t, len(tasks)),
                            (10, int(s1 * 1.04)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
-        # plt.figure()
-        # plt.imshow(img2)
+
+        edge = 5
+        np_mat_t = np_mat.copy()
+        np_mat_t[:, i_task] = np.array([255, 0, 0]).astype(int)
+        # np_mat_t = cv2.resize(np_mat_t, (len(np_mat_t) * 2, len(np_mat_t) * 2),
+        #                       fx=0, fy=0, interpolation=cv2.INTER_NEAREST)
+        img2[edge:(edge + len(np_mat_t)), ((img.shape[1] - edge) - len(np_mat_t)):(img.shape[1] - edge), :] = np_mat_t
 
         imgs.append(img2)
+
 
     # same number of frames per plant
     imgs = imgs + [imgs[-1]] * (n_frames - len(imgs))
@@ -102,7 +122,7 @@ for angle in selec0['angle'].unique():
     imgs_gif = (Image.fromarray(img) for img in imgs)
     # imgs = (Image.open(f) for f in paths)
     fps = 6
-    # img = imgs_gif[0]  # extract first image from iterator
+    # image = imgs_gif[0]  # extract first image from iterator
     img = next(imgs_gif)
-    img.save(fp='data/videos/berry_tracking/7233_multi_angle/{}_{}_{}fps.gif'.format(plantid, angle, fps),
+    img.save(fp='data/videos/berry_tracking/2020/{}_{}_{}fps.gif'.format(plantid, angle, fps),
              format='GIF', append_images=imgs_gif, save_all=True, duration=1000/fps, loop=0)

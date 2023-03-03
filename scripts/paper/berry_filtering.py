@@ -22,6 +22,23 @@ if exp == 'DYN2020-05-15':
 
 # ===== filtering berries ============================================================================================
 
+"""
+=== exp2020 plantid 7232 ===
+# raw: 901 berryids. 
+len > 1 : 847.
+> 90% points: 293
+not small: 293
+normal end volume (or color): 281
+bot normal volume color: 279
+
+df_berry[(df_berry['mape'] < 2.5) & (df_berry['enough_points'])]
+df_berry[(df_berry['mape'] < 2.5) & (df_berry['enough_points']) & (df_berry['normal_end_volume'])]
+
+df_berry[(df_berry['enough_points']) & (df_berry['normal_end_volume'])]
+df_berry[(df_berry['enough_points']) & (df_berry['not_small'])]
+s = df_berry[(df_berry['enough_points']) & (df_berry['normal_end_volume']) & (df_berry['normal_end_hue'])]
+
+"""
 df_berry = []
 
 for plantid in res['plantid'].unique():
@@ -49,15 +66,7 @@ for plantid in res['plantid'].unique():
                 not_small = np.median(s['volume']) > 0.2 * median_volume
                 df_berry.append([plantid, angle, k, mape, not_small, enough_points, normal_end_volume, normal_end_hue])
 
-df_berry = pd.DataFrame(df_berry, columns=['plantid', 'angle', 'id', 'mape', 'not_small',
+df_berry_classif = pd.DataFrame(df_berry, columns=['plantid', 'angle', 'id', 'mape', 'not_small',
                                                'enough_points', 'normal_end_volume', 'normal_end_hue'])
 
-# filter berries tracked during >90% of the experiment
-df_berry_filter = df_berry[df_berry['enough_points']]
-# filter berries with MAPE(V) > 2.5%
-df_berry_filter = df_berry_filter[df_berry_filter['mape'] < 2.5]
-# filter berries with no abnormalities
-df_berry_filter = df_berry_filter[(df_berry_filter['normal_end_volume']) & (df_berry_filter['normal_end_hue'])
-                                & (df_berry_filter['not_small'])]
-
-df_berry_filter.to_csv('data/grapevine/berry_filter.csv', index=False)
+df_berry_classif.to_csv('data/grapevine/berry_filter.csv', index=False)

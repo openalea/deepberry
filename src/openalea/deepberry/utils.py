@@ -18,7 +18,7 @@ def ellipse_interpolation(x, y, w, h, a, n_points=100):
     return np.array([points_x, points_y])
 
 
-def iou(polygon1, polygon2):
+def iou_between_polygons(polygon1, polygon2):
     """
     Computes the intersection over union (IoU) between two polygons
     https://stackoverflow.com/questions/58435218/intersection-over-union-on-non-rectangular-quadrilaterals
@@ -59,7 +59,7 @@ def nms(polygons, scores, threshold):
     while len(order) > 0:
         i_max = order[0]
         to_keep.append(i_max)
-        ious = np.array([iou(polygons[i_max], polygons[i]) for i in order])
+        ious = np.array([iou_between_polygons(polygons[i_max], polygons[i]) for i in order])
         order = order[np.where(ious < threshold)[0]]
 
     return to_keep

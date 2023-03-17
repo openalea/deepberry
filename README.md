@@ -9,10 +9,10 @@
     pip install opencv-contrib-python
     pip install pycpd
 
-    # optionnal, for model training (note - for GPU compatibility, see further guides at the top of the training scripts): 
+    # (optionnal) for model training (note: for GPU compatibility, see further guidelines at the top of the training scripts): 
     pip install -U segmentation-models
 
-    # optionnal, for model validation metrics:
+    # (optionnal) for model validation metrics:
     pip install object_detection_metrics
 
 ### Maintainers

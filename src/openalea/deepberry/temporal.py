@@ -16,7 +16,7 @@ def point_sets_registration(set1, set2, transformation='affine'):
         contains the x,y coordinates of the reference/fixed point cloud.
     set2 : (m, 2) array
         contains the x,y coordinates of the moving point cloud.
-    transformation : float
+    transformation : str
         define the type of transformation used for registration, among {'rigid', 'affine', 'deformable'}.
 
     Returns

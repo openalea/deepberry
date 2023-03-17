@@ -56,10 +56,13 @@ def nms(polygons, scores, threshold):
     to_keep = []
     order = np.argsort(scores)[::-1]
 
+    if threshold == 1.:
+        return list(order)
+
     while len(order) > 0:
         i_max = order[0]
         to_keep.append(i_max)
         ious = np.array([iou_between_polygons(polygons[i_max], polygons[i]) for i in order])
-        order = order[np.where(ious < threshold)[0]]
+        order = order[np.where(ious <= threshold)[0]]
 
     return to_keep

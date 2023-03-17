@@ -62,12 +62,3 @@ def test_seg_instance(image):
     # remove temporary files
     os.remove(filename + 'x.png')
     os.remove(filename + 'y.png')
-
-
-
-
-
-
-
-
-

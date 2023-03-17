@@ -75,10 +75,13 @@ def test_tree():
     t3 = np.array(tree_order(matrix, threshold=0., i_start=0))
 
     assert len(set(t1[:, 0])) <= len(set(t2[:, 0])) <= len(set(t3[:, 0]))
+    assert t1.shape == (n_sets - 1, 2)
+    assert t2.shape == (n_sets - 1, 2)
+    assert t3.shape == (n_sets - 1, 2)
 
-    t4 = np.array(tree_order(matrix, threshold=0., i_start=25))
+    t4 = np.array(tree_order(matrix, threshold=0., i_start=int(n_sets / 2)))
 
-    assert t1.shape == t2.shape == t3.shape == t4.shape == (n_sets - 1, 2)
+    assert t4.shape == (n_sets - 1, 2)
 
 
 def test_full_tracking():

@@ -204,10 +204,9 @@ def generate_segmentation_instance(image, label, dirsave, center_noise=0.1, scal
     ----------
     image : 3D array
         Image of a grapevine cluster.
-    label : pandas.core.frame.DataFrame
-        Each row corresponds to a berry label, in a box format described by 4 parameters (columns "box_x", "box_y",
-        "box_w", "box_h") and an ellipse format described by 5 parameters (columns "ell_x", "ell_y", "ell_w", "ell_h",
-        "ell_a").
+    label : pandas.core.series.Series
+        contain a berry label, described by 4 box parameters ("box_x", "box_y", "box_w", "box_h") and 5 ellipse
+        parameters ("ell_x", "ell_y", "ell_w", "ell_h", "ell_a").
     dirsave : str
         Where generated input and output are saved.
     center_noise : float

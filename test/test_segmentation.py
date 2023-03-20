@@ -26,11 +26,12 @@ def test_load_model(models):
 
     model_detection, model_segmentation = models
 
-    assert type(model_detection).__name__ == 'DetectionModel'  # cv2
+    assert type(model_detection).__name__ in ['DetectionModel', 'dnn_DetectionModel']  # may differ depending on
+    # cv2 version
     assert type(model_segmentation).__name__ == 'Functional'  # keras
 
 
-def test_run_detection_vignette(models):
+def test_run_detection_random_vignette(models):
 
     model_detection, _ = models
     model_detection.setInputParams(size=(VIGNETTE_SIZE_DET, VIGNETTE_SIZE_DET), scale=1 / 255, swapRB=False)
@@ -40,7 +41,7 @@ def test_run_detection_vignette(models):
     _, _, _ = model_detection.detect(vignette, confThreshold=0.5, nmsThreshold=0.5)
 
 
-def test_run_segmentation_vignette(models):
+def test_run_segmentation_random_vignette(models):
 
     vignette = np.random.randint(0, 255, (VIGNETTE_SIZE_SEG, VIGNETTE_SIZE_SEG, 3))
 

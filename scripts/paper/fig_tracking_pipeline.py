@@ -18,7 +18,7 @@ index = index[index['imgangle'].notnull()]
 
 selec_index = index[(index['exp'] == exp) & (index['plantid'] == plantid) & (index['imgangle'] == angle)]
 
-df_ell = pd.read_csv('X:/phenoarch_cache/cache_{0}_NEW/full_results_temporal_{0}.csv'.format(exp))
+df_ell = pd.read_csv('X:/phenoarch_cache/cache_{0}/full_results_temporal_{0}.csv'.format(exp))
 selec_ell = df_ell[(df_ell['plantid'] == plantid) & (df_ell['angle'] == angle)]
 
 tasks = list(selec_ell.groupby('task')['timestamp'].mean().sort_values().reset_index()['task'])
@@ -28,7 +28,7 @@ tasks = list(selec_ell.groupby('task')['timestamp'].mean().sort_values().reset_i
 
 # ===== time-series of images =========================================================================================
 
-do_color = False
+do_color = True
 
 xmin, xmax, ymin, ymax = 300, 1100, 50, 1950
 colors = [[int(k) for k in np.random.random(3) * 255.] for _ in range(max(selec_ell['berryid']) + 1)]
@@ -45,7 +45,7 @@ for k, i_task in enumerate(tasks_selection):
     s_ell = selec_ell[selec_ell['task'] == task]
 
     ax = plt.subplot(1, len(tasks_selection), k + 1)
-    plt.xlabel(r'$t_{{{}}}$'.format(i_task), fontsize=15)
+    plt.xlabel(r'$t_{{{}}}$'.format(i_task), fontsize=20)
     plt.xticks([], [])
     plt.yticks([], [])
     for _, ell in s_ell.iterrows():
@@ -62,11 +62,13 @@ for k, i_task in enumerate(tasks_selection):
                               a, 0., 360, (255, 0, 0), 5)
     plt.imshow(img)
 
+plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=0.05, hspace=None)
 
+plt.savefig(DIR_OUTPUT + 'e.png')  # open full screen before!!
 
 # ===== distance matrix ==============================================================================================
 
-M = np.load('X:/phenoarch_cache/cache_{}_NEW/distance_matrix/{}/{}.npy'.format(exp, plantid, angle))
+M = np.load('X:/phenoarch_cache/cache_{}/distance_matrix/{}/{}.npy'.format(exp, plantid, angle))
 M2 = M[:, :, 0].copy()
 for i in range(len(M)):
     for j in range(len(M)):
@@ -82,8 +84,10 @@ set_threshold = 8
 plt.plot(np.where(M2 < set_threshold)[0], np.where(M2 < set_threshold)[1], 'r.', markersize=7)
 cb = plt.colorbar()
 cb.set_label('D($t_i$, $t_j$)', fontsize=25)
-plt.xlabel('$i$', fontsize=35)
-plt.ylabel('$j$', fontsize=35)
+plt.xlabel('$i$', fontsize=25)
+plt.ylabel('$j$', fontsize=25)
+
+plt.savefig(DIR_OUTPUT + 'c.png')  # open full screen before!!
 
 # ===== CPD example ==================================================================================================
 
@@ -98,13 +102,16 @@ set1, set2 = points_sets[t1], points_sets[t2]
 set2_bis = point_sets_registration(set1, set2, transformation='affine')
 all = np.concatenate((set1, set2, set2_bis))
 
+xmin, xmax, ymin, ymax = 300, 1100, 50, 1950
 
 s1 = set1
 plt.figure()
 for k, s2 in enumerate([set2, set2_bis]):
     ax = plt.subplot(1, 2, k + 1)
-    plt.xlim(min(all[:, 0]) - 150, max(all[:, 0]) + 150)
-    plt.ylim((min(all[:, 1]) - 50, max(all[:, 1]) + 50))
+    # plt.xlim(min(all[:, 0]) - 150, max(all[:, 0]) + 150)
+    # plt.ylim((min(all[:, 1]) - 50, max(all[:, 1]) + 50))
+    plt.xlim((xmin, xmax))
+    plt.ylim((ymin, ymax))
     # plt.xlabel('$x_e$', fontsize=20)
     # plt.ylabel('$y_e$', fontsize=20)
     plt.xticks([], [])
@@ -112,6 +119,8 @@ for k, s2 in enumerate([set2, set2_bis]):
     plt.gca().set_aspect('equal', adjustable='box')
     plt.plot(s2[:, 0], s2[:, 1], 'bo', mfc='none', markersize=10)
     plt.plot(s1[:, 0], s1[:, 1], 'rx', markersize=8)
+
+plt.savefig(DIR_OUTPUT + 'b.png')  # open full screen before!!
 
 # score
 s1, s2 = set1, set2_bis

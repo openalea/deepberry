@@ -17,7 +17,7 @@
 
 ### Maintainers
 
-* Benoit Daviet (benoit.daviet@inrae.fr)
+* Benoit Daviet (b.daviet@hotmail.com)
 * Fournier Christian (christian.fournier@inrae.fr)
 
 

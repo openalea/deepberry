@@ -1,17 +1,11 @@
-import os
 import numpy as np
 import pandas as pd
 import cv2
 import matplotlib.pyplot as plt
 
 from scipy.stats import circmean, linregress
-from scipy.interpolate import interp1d
 
 from scipy.ndimage import uniform_filter1d, median_filter
-
-from PIL import Image
-from deepberry.src.openalea.deepberry.utils import ellipse_interpolation
-
 
 DIR_OUTPUT = 'data/grapevine/paper/'
 
@@ -147,6 +141,9 @@ berries = berries[(berries['normal_end_volume']) & (berries['normal_end_hue']) &
 # filter 10% berries with highest V_MAPE
 berries = berries[berries['mape'] < 3.8]
 
+# berries = berries[berries['angle'].isin([60, 150, 240, 330])]
+berries = berries[berries['angle'].isin([30, 150, 270])]
+
 # berries = berries.sample(20, replace=False)
 
 selec = res[res['plantid'] == plantid]
@@ -163,7 +160,8 @@ for _, row in berries.iterrows():
 df_single = pd.concat(df_single)
 # df_single.to_csv('data/grapevine/paper/single_berries.csv', index=False)
 
-# ===== focus to understand volume =====
+
+# ===== final plot ==================================================================================================
 
 
 def y_to_x(x, y, y_target):
@@ -175,760 +173,215 @@ def y_to_x(x, y, y_target):
     return x_target
 
 
-plt.figure()
-df_vars = []
-for angle_id in df_single['angle_id'].unique()[::1]:
-    s = df_single[df_single['angle_id'] == angle_id].sort_values('t')
-    t, v = np.array(s['t']), np.array(s['v_smooth'])
-    v0, vmax = np.median(v[:20]), max(v)
-    vr = (v - v0) / v0
-    vs = (v - v0) / (vmax - v0)
+trajs = [df_single[df_single['angle_id'] == i].sort_values('t') for i in df_single['angle_id'].unique()]
+n = len(trajs)
 
-    t25 = y_to_x(t, vs, 0.25)
-    t75 = y_to_x(t, vs, 0.75)
+# _____ volume _____
 
-    vr25 = np.interp(t25, t, vr)
-    vr75 = np.interp(t75, t, vr)
+qa, qb = 0.15, 0.85
 
-    plt.plot(t, vr, '-', color='grey', alpha=0.6, linewidth=0.6)
-    # plt.plot(t25, 0.25, 'go')
-    # plt.plot(t75, 0.75, 'ro')
-    plt.plot(t25, vr25, 'go')
-    plt.plot(t75, vr75, 'ro')
-    plt.plot([t25, t75], [vr25, vr75], 'b-')
+# single berry
+t, v = [np.array(s['t']) for s in trajs], [np.array(s['v_smooth']) for s in trajs]
+v_0 = np.array([np.mean(vi[:1]) for vi in v])
+v_max = np.array([max(vi) for vi in v])
+vr = [(vi - vi_0) / vi_0 for vi, vi_0 in zip(v, v_0)]
+vs = [(vi - vi_0) / (vi_max - vi_0) for vi, vi_0, vi_max in zip(v, v_0, v_max)]
+t_va = np.array([y_to_x(ti, vsi, qa) for ti, vsi in zip(t, vs)])
+t_vb = np.array([y_to_x(ti, vsi, qb) for ti, vsi in zip(t, vs)])
+t_v05 = np.array([y_to_x(ti, vsi, 0.5) for ti, vsi in zip(t, vs)])
+vra = np.array([np.interp(ti_va, ti, vri) for ti_va, ti, vri in zip(t_va, t, vr)])
+vrb = np.array([np.interp(ti_vb, ti, vri) for ti_vb, ti, vri in zip(t_vb, t, vr)])
 
-    df_vars.append([v0, vmax, t25, t75, vr25, vr75])
-df_vars = pd.DataFrame(df_vars, columns=['v0', 'vmax', 't25', 't75', 'vr25', 'vr75'])
+# mean berry
+t_mean, v_mean = np.array(df_single.groupby('task').mean().sort_values('t')[['t', 'v_smooth']]).T
+# v_mean = uniform_filter1d(v_mean, size=3, mode='nearest')
+v_mean_0 = v_mean[0]
+v_mean_max = max(v_mean)
+vr_mean = (v_mean - v_mean_0) / v_mean_0
+vs_mean = (v_mean - v_mean_0) / (v_mean_max - v_mean_0)
+t_mean_va = y_to_x(t_mean, vs_mean, qa)
+t_mean_vb = y_to_x(t_mean, vs_mean, qb)
+# t_mean_v05 = y_to_x(t_mean, vs_mean, 0.5)
+t_mean_vra = np.interp(t_mean_va, t_mean, vr_mean)
+t_mean_vrb = np.interp(t_mean_vb, t_mean, vr_mean)
 
-duration = df_vars['t75'] - df_vars['t25']
-vgain = (df_vars['vr75'] - df_vars['vr25'])  # proportionnal to vmax/v0
-speed = vgain / duration
-r2 = linregress(np.array(df_vars['vmax'] / df_vars['v0']), np.array(speed))[2] ** 2
-print(r2)
-plt.figure()
-plt.plot(df_vars['vmax'] / df_vars['v0'], speed, 'ko')
-r2 = linregress(np.array(df_vars['vmax'] / df_vars['v0']), np.array(duration))[2] ** 2
-print(r2)
-plt.figure()
-plt.plot(df_vars['vmax'] / df_vars['v0'], duration, 'ko')
+# _____ plot volume main _____
 
-plt.plot(df_vars['v0'], speed, 'ko')
-r2 = linregress(np.array(df_vars['v0']), np.array(speed))[2] ** 2
-print(r2)
+fig = plt.figure(figsize=(16, 8), dpi=100)
+plt.gca().tick_params(axis='both', which='major', labelsize=20)
+for k in range(n):
+    plt.plot(t[k], vr[k], '-', color='grey', linewidth=1., alpha=0.7)
+plt.plot(t_mean, vr_mean, 'r--', linewidth=2., alpha=0.9)
+plt.xlabel('Time (days)', fontsize=20)
+plt.ylabel(r'$V_{r} = (V - V_0) / V_0$', fontsize=20)
+plt.gca().tick_params(axis='both', which='major', labelsize=15)
+plt.gca().yaxis.set_ticks_position('both')
+plt.gca().xaxis.set_ticks_position('both')
+plt.gca().tick_params(axis='both', which='major', direction='in')  # axis number size
+plt.gca().annotate(f'n = {n}', xy=(0.98, 0.02), color='blue',
+                   xycoords='axes fraction', fontsize=25, horizontalalignment='right', verticalalignment='bottom')
 
-# ===== and the mean berry ? =====
-gb = df_single.groupby('task').mean().reset_index().sort_values('t')
-t, v = np.array(gb['t']), np.array(gb['v_smooth'])
-v0, vmax = np.median(v[:20]), max(v)
-vr = (v - v0) / v0
-vs = (v - v0) / (vmax - v0)
-t25 = y_to_x(t, vs, 0.25)
-t75 = y_to_x(t, vs, 0.75)
-vr25 = np.interp(t25, t, vr)
-vr75 = np.interp(t75, t, vr)
-duration = t75 - t25
-vgain = vr75 - vr25  # proportionnal to vmax/v0
-speed = vgain / duration
-print(duration, speed, vmax/v0)
+plt.savefig('data/grapevine/paper/final_a.png')
 
-plt.plot(t, vr, 'k-')
+# _____ plot volume scatters _____
 
-# ======================================
+x = v_max / v_0
+fig = plt.figure(figsize=(16, 6), dpi=100)
 
-do_x_scaling = False
-
-hists = {'v0': [], 'vmax': [], 't_v': [], 'kin_v': [],
-         'h0': [], 'hn': [], 't_h': [], 't_h01': [], 'kin_h': []}
-
-for var in ['volume', 'hue_scaled', 'both']:
-
-    fig, ax = plt.subplots()
-    fontsize = 16
-    ax.tick_params(axis='both', which='major', labelsize=10)
-    if var == 'volume':
-        # plt.ylim((-0.1, 1.1))
-        # plt.ylabel(r'$V_s = (V - V_0) / (V_{n} - V_0)$', fontsize=fontsize)
-        # plt.ylabel(r'$V_{s2} = (V - V_0) / V_0$', fontsize=fontsize)
-        plt.ylabel(r'$V_{s3} = V / V_{max}$', fontsize=fontsize)
-        if do_x_scaling:
-            plt.xlabel(r'$t - t(V_s = 0.5)$ (days)', fontsize=fontsize)
-        else:
-            plt.xlabel(r'$t$ (days)', fontsize=fontsize)
-    elif var == 'hue_scaled':
-        # plt.ylabel(r'$H_s = (H - H_0) / (H_n - H_0)$', fontsize=fontsize)
-        plt.ylabel('PC = Pixels with >10% color change (%)', fontsize=fontsize)
-        plt.ylim((-0.1, 1.1))
-        if do_x_scaling:
-            plt.xlabel(r'$t - t(H_s = 0.5)$ (days)', fontsize=fontsize)
-        else:
-            plt.xlabel(r'$t$ (days)', fontsize=fontsize)
-
-    elif var == 'both':
-        # plt.xlim((-0.1, 1.1))
-        # plt.ylim((-0.1, 1.1))
-        plt.xlabel(r'$V_s$', fontsize=fontsize)
-        # plt.xlabel(r'$(V - V_0) / V_0$', fontsize=fontsize)
-        # plt.ylabel(r'$H_s$', fontsize=fontsize)
-        plt.ylabel('PC (%)', fontsize=fontsize)
-
-    # if var in ['volume', 'hue_scaled']:
-    #     if do_x_scaling:
-    #         plt.axhline(y=0.25, color='g', linestyle='--', linewidth=1., alpha=0.6)
-    #         plt.axhline(y=0.75, color='g', linestyle='--', linewidth=1., alpha=0.6)
-    #     else:
-    #         plt.axhline(y=0.5, color='g', linestyle='--', linewidth=1., alpha=0.6)
-
-    xy_list = []
-    for angle_id in df_single['angle_id'].unique():
-        s = df_single[df_single['angle_id'] == angle_id].sort_values('t')
-
-        x_scaled, y_scaled = {}, {}
-
-        # ===== Volume ================================================================================================
-
-        x, y = np.array(s['t']), np.array(s['volume'])
-        # y_averaged = uniform_filter1d(y, size=15, mode='nearest')
-        y_averaged = median_filter(y, size=25, mode='reflect')
-
-        y0, yn = np.median(y_averaged[:20]), max(y_averaged)
-        # ys = (y_averaged - y0) / (yn - y0)
-        ys = (y_averaged - y0) / y0
-        # ys = y_averaged / yn
-
-        if var == 'volume':
-            hists['v0'].append(y0)
-            hists['vmax'].append(yn)
-
-            # # kinetics
-            # k25 = next(k for k, val in enumerate(ys) if val > 0.25 and k >= np.argmin(ys))
-            # k75 = next(k for k, val in enumerate(ys) if val > 0.75 and k >= np.argmin(ys))
-            # hists['kin_v'].append(x[k75] - x[k25])
-
-        if do_x_scaling:
-            k_scaling = next(k for k, val in enumerate(ys) if val > 0.5 and k >= np.argmin(ys))
-            xs = x - x[k_scaling]
-            if var == 'volume':
-                hists['t_v'].append(x[k_scaling])
-        else:
-            xs = x
-        x_scaled['volume'], y_scaled['volume'] = xs, ys
-
-        # ===== Color =================================================================================================
-
-        x, y = np.array(s['t']), np.array(s['hue_scaled'])
-        y0, yn = np.median(y[:20]), np.median(y[-20:])
-        ys = (y - y0) / (yn - y0)
-
-        if var == 'hue_scaled':
-            hists['h0'].append(y0)
-            hists['hn'].append(yn)
-
-            # kinetics
-            k25 = next(k for k, val in enumerate(ys) if val > 0.25 and k >= np.argmin(ys))
-            k75 = next(k for k, val in enumerate(ys) if val > 0.75 and k >= np.argmin(ys))
-            hists['kin_h'].append(x[k75] - x[k25])
-
-        if do_x_scaling:
-            k_scaling = next(k for k, val in enumerate(ys) if val > 0.5 and k >= np.argmin(ys))
-            xs = x - x[k_scaling]
-            if var == 'hue_scaled':
-                hists['t_h'].append(x[k_scaling])
-                k_scaling_01 = next(k for k, val in enumerate(ys) if val > 0.1 and k >= np.argmin(ys))
-                hists['t_h01'].append(x[k_scaling_01])
-        else:
-            xs = x
-
-        x_scaled['hue_scaled'], y_scaled['hue_scaled'] = xs, ys
-
-        # =============================================================================================================
-
-        if var == 'both':
-            x_plot, y_plot = y_scaled['volume'], y_scaled['hue_scaled']
-        else:
-            x_plot, y_plot = x_scaled[var], y_scaled[var]
-
-        plt.plot(x_plot, y_plot, '-', color='grey', linewidth=0.6, alpha=0.6)
-
-        # x-scaling means that measurements are not at the same timings anymore across berries. So interpolation is
-        # necessary. (Here, it's chosen to interpolate through all x-int values across the berry range)
-        f = interp1d(x_plot, y_plot, fill_value='extrapolate')
-        x_lnp = np.arange(int(min(x_plot)), int(max(x_plot)) + 1)
-        xy_list.append([x_lnp, f(x_lnp)])
-
-    xy = pd.DataFrame(np.concatenate(xy_list, axis=1).T, columns=['x', 'y'])
-
-    # for metrics, linestyle in zip(['mean'], ['-']):
-    #     # single berry
-    #     if do_x_scaling:
-    #         xy_gb = xy.groupby('x').agg(metrics).reset_index().sort_values('x')
-    #         plt.plot(xy_gb['x'], xy_gb['y'], 'k' + linestyle)
-
-        # # mean berry (using the same berries as the one successfully tracked, to remove shift bias). Boths methods
-        # # still differ by the way data are standardised (per berry or globally)
-        # selec_same_berries = pd.concat([selec[(selec['angle'] == r['angle']) & (selec['berryid'] == r['id'])]
-        #                                 for _, r in df_berry.iterrows()])
-        # gb = selec_same_berries.groupby('task')[[var, 't']].agg(metrics).reset_index().sort_values('t')
-        # x_mean, y_mean = np.array(gb['t']), np.array(gb[var])
-        # if var == 'volume':
-        #     y_mean_scaled = y_mean / max(y_mean)
-        #     k_scaling = next(k for k, val in enumerate(y_mean_scaled) if val > 0.85 and k >= np.argmin(y_mean_scaled))
-        # elif var == 'hue_scaled':
-        #     y_mean_scaled = (y_mean - min(y_mean)) / (max(y_mean) - min(y_mean))
-        #     k_scaling = next(k for k, val in enumerate(y_mean_scaled) if val > 0.5 and k >= np.argmin(y_mean_scaled))
-        # if do_x_scaling:
-        #     x_mean_scaled = x_mean - x_mean[k_scaling]
-        # else:
-        #     x_mean_scaled = x_mean
-        # plt.plot(x_mean_scaled, y_mean_scaled, 'r' + linestyle)
-
-    plt.savefig(DIR_OUTPUT + 'multi_berry_{}_x{}.png'.format(var, do_x_scaling), bbox_inches='tight')
+def f_subplot(x, y):
+    plt.plot(x, y, 'o', color='grey', alpha=0.8)
+    plt.xlabel(r'$V_{max}$' + ' / ' + r'$V_0$', fontsize=20)
+    plt.gca().tick_params(axis='both', which='major', labelsize=15)
+    plt.gca().yaxis.set_ticks_position('both')
+    plt.gca().xaxis.set_ticks_position('both')
+    plt.gca().tick_params(axis='both', which='major', direction='in')  # axis number size
+    r2 = linregress(x, y)[2] ** 2
+    plt.gca().annotate(f'R² = {r2:.3f}', xy=(0.98, 0.02), color='blue',
+                       xycoords='axes fraction', fontsize=15, horizontalalignment='right', verticalalignment='bottom')
 
 
-def fig_histo():
-    fig, ax = plt.subplots(figsize=(5, 1.5), dpi=100)
-    plt.gca().axes.yaxis.set_ticklabels([])
-    plt.gca().axes.get_yaxis().set_visible(False)
-    ax.tick_params(axis='both', which='major', labelsize=20)
+plt.subplot(1, 3, 1)
+y = t_va  # timing
+f_subplot(x, y)
+plt.plot(v_mean_max / v_mean_0, t_mean_va, 'r*', markersize=15)
+# plt.ylabel(r'$t(V_s = 15$%$)$', fontsize=15)
+plt.ylabel('Ripening timing (days)', fontsize=20)
 
+plt.subplot(1, 3, 2)
+y = t_vb - t_va  # duration
+f_subplot(x, y)
+plt.plot(v_mean_max / v_mean_0, t_mean_vb - t_mean_va, 'r*', markersize=15)
+# plt.ylabel(r'D = $t(V_s = 85$%$) - t(V_s = 15$%$)$', fontsize=15)
+plt.ylabel('Ripening duration (days)', fontsize=20)
 
-# V0
-fig_histo()
-plt.xlabel(r'$V_0$ ($10^4$ px³)', fontsize=30)
-plt.hist(np.array(hists['v0']) / 1e4, 15, color='grey')
-plt.savefig(DIR_OUTPUT + 'multi_berry_hist_v0.png', bbox_inches='tight')
-
-# Vmax
-fig_histo()
-plt.xlabel(r'$V_{max}$ ($10^4$ px³)', fontsize=30)
-plt.hist(np.array(hists['vmax']) / 1e4, 15, color='grey')
-plt.savefig(DIR_OUTPUT + 'multi_berry_hist_vmax.png', bbox_inches='tight')
-
-# H0
-fig_histo()
-plt.xlabel(r'$H_0$', fontsize=30)
-plt.hist(np.array(hists['h0']), 15, color='grey')
-plt.savefig(DIR_OUTPUT + 'multi_berry_hist_h0.png', bbox_inches='tight')
-
-# Hn
-fig_histo()
-plt.xlabel(r'$H_n$', fontsize=30)
-plt.hist(np.array(hists['hn']), 15, color='grey')
-plt.savefig(DIR_OUTPUT + 'multi_berry_hist_hn.png', bbox_inches='tight')
-
-# V_kin
-fig_histo()
-plt.xlim((-1, 16))
-plt.xlabel(r'$V_{kin} = t2 - t1$ (days)', fontsize=30)
-plt.hist(np.array(hists['kin_v']), 15, color='green', alpha=0.6)
-plt.savefig(DIR_OUTPUT + 'multi_berry_hist_vkin.png', bbox_inches='tight')
-
-# H_kin
-fig_histo()
-plt.xlim((-1, 16))
-plt.xlabel(r'$H_{kin} = t2 - t1$ (days)', fontsize=30)
-plt.hist(np.array(hists['kin_h']), 15, color='green', alpha=0.6)
-plt.savefig(DIR_OUTPUT + 'multi_berry_hist_hkin.png', bbox_inches='tight')
-
-# t(Hs = 0.5)
-fig_histo()
-plt.xlim((9, 36))
-plt.xlabel(r'$t(H_s = 0.5)$ (days)', fontsize=30)
-plt.hist(np.array(hists['t_h']), 15, color='green', alpha=0.6)
-plt.savefig(DIR_OUTPUT + 'multi_berry_hist_th.png', bbox_inches='tight')
-
-# t(Vs = 0.5)
-fig_histo()
-plt.xlim((9, 36))
-plt.xlabel(r'$t(V_s = 0.5)$ (days)', fontsize=30)
-plt.hist(np.array(hists['t_v']), 15, color='green', alpha=0.6)
-plt.savefig(DIR_OUTPUT + 'multi_berry_hist_tv.png', bbox_inches='tight')
-
-# t(Vs = 0.5) vs t(Hs = 0.5)
-fig, ax = plt.subplots(figsize=(3, 5), dpi=100)
-ax.tick_params(axis='both', which='major', labelsize=20)
-x, y = hists['t_v'], hists['t_h']
-ax.axline((np.mean(x), np.mean(x)), slope=1, color='k', linestyle='-', label='x = y')
-plt.plot(x, y, '.', color='grey')
-r2 = linregress(x, y)[2] ** 2
-plt.text(0.52, 0.03, f'R² = {r2:.2f}', color='red',
-         horizontalalignment='left', verticalalignment='bottom', transform=ax.transAxes, fontsize=15)
+plt.subplot(1, 3, 3)
+y = (vrb - vra) / (t_vb - t_va)  # speed
+f_subplot(x, y)
+plt.plot(v_mean_max / v_mean_0, (t_mean_vrb - t_mean_vra) / (t_mean_vb - t_mean_va), 'r*', markersize=15)
+# plt.ylabel(r'$(Vr(t(Vs=85$%$)) - Vr(t(Vs=15$%$))) / D$', fontsize=15)
+plt.ylabel('Ripening relative speed ($days^{-1}$)', fontsize=20)
 a, b = np.polyfit(x, y, 1)
-plt.plot([min(x), max(x)], a * np.array([min(x), max(x)]) + b, '--', color='r', label=f'y = {a:.{2}f}x {b:+.{2}f}')
-plt.legend()
-plt.xlabel(r'$t(V_s = 0.5)$ (days)', fontsize=20)
-plt.ylabel(r'$t(H_s = 0.5)$ (days)', fontsize=20)
-plt.savefig(DIR_OUTPUT + 'multi_berry_hist_cor1.png', bbox_inches='tight')
-
-# t(Vs = 0.5) vs t(Hs = 0.5)
-fig, ax = plt.subplots(figsize=(3, 5), dpi=100)
-ax.tick_params(axis='both', which='major', labelsize=20)
-x, y = hists['kin_v'], hists['kin_h']
-ax.axline((np.mean(x), np.mean(x)), slope=1, color='k', linestyle='-', label='x = y')
-plt.plot(x, y, '.', color='grey')
-r2 = linregress(x, y)[2] ** 2
-plt.text(0.52, 0.03, f'R² = {r2:.2f}', color='red',
-         horizontalalignment='left', verticalalignment='bottom', transform=ax.transAxes, fontsize=15)
-a, b = np.polyfit(x, y, 1)
-plt.plot([min(x), max(x)], a * np.array([min(x), max(x)]) + b, '--', color='r', label=f'y = {a:.{2}f}x {b:+.{2}f}')
-plt.legend()
-plt.xlabel(r'$V_{kin}$ (days)', fontsize=20)
-plt.ylabel(r'$H_{kin}$ (days)', fontsize=20)
-plt.savefig(DIR_OUTPUT + 'multi_berry_hist_cor2.png', bbox_inches='tight')
-
-# additional graphs for Charles
-
-v0, vmax = np.array(hists['v0']), np.array(hists['vmax'])
-vkin = np.array(hists['kin_v'])
-
-plt.figure()
-plt.xlabel('$V_0$', fontsize=20)
-plt.ylabel('$V_{max}$', fontsize=20)
-plt.plot(v0, vmax, 'ko')
-a, b = np.polyfit(v0, vmax, 1)
-plt.plot([0, max(v0)], a * np.array([0, max(v0)]) + b, '--', color='r', label=f'$V_{{max}}$ = {a:.{2}f}$V_0$ {b:+.{2}f}')
-plt.xlim((0, max(v0) * 1.05))
-plt.ylim((0, max(vmax) * 1.05))
+plt.plot([min(x), max(x)], a * np.array([min(x), max(x)]) + b, '--', color='b', label=f'y = {a:.{2}f}x {b:+.{2}f}')
 plt.legend(prop={'size': 15})
-plt.gca().set_aspect('equal', adjustable='box')
-
-plt.figure()
-plt.xlabel('$V_0$', fontsize=20)
-plt.ylabel('$V_{max} / V_0$', fontsize=20)
-plt.plot(v0, vmax/v0, 'ko')
-
-plt.figure()
-plt.xlabel('$V_0$', fontsize=20)
-plt.ylabel('$(1 / V_{kin}) . (V_{max} / V_0$)', fontsize=20)
-plt.plot(v0, (1/vkin) * (vmax/v0), 'ko')
-
-plt.figure()
-plt.xlabel(r'$t(V_s = 0.5)$', fontsize=20)
-plt.ylabel('$V_{max} / V_0$', fontsize=20)
-plt.plot(np.array(hists['t_v']), vmax/v0, 'ko')
-
-plt.figure()
-plt.xlabel(r'$t(V_s = 0.5)$', fontsize=20)
-plt.ylabel('$V_{kin}$', fontsize=20)
-plt.plot(np.array(hists['t_v']), vkin, 'ko')
-
-# new graphs for Charles
-
-
-plt.figure()
-plt.xlabel('$V_0$', fontsize=20)
-plt.ylabel('t(Vs=0.5)', fontsize=20)
-plt.plot(v0, np.array(hists['t_v']), 'ko')
-
-plt.figure()
-plt.xlabel('$V_0$', fontsize=20)
-plt.ylabel('$Vkin', fontsize=20)
-plt.plot(v0, vkin, 'ko')
-
-
-# ===== area = f(t) ==================================================================================================
-
-df_res = []
-
-#fig, axs = plt.subplots(2, 5)
-
-# K = 10
-# df_berry_selec = df_berry.sort_values('n', ascending=False).iloc[:(K ** 2)].sort_values('mape')
-# df_berry_selec = df_berry[(df_berry['n'] > 120) & (df_berry['mape'] < 2.5)]
-# df_berry_selec = df_berry[df_berry['n'] > 120].sort_values('mape').iloc[(K ** 2):(2 * (K ** 2))]
-n0 = len(df_berry_selec)
-
-plt.figure(plantid)
-for i, (_, row) in enumerate(df_berry_selec.iterrows()):
-    angle, berryid = row['angle'], row['id']
-
-    s = selec[(selec['angle'] == angle) & (selec['berryid'] == berryid)].sort_values('t')
-    x, y = np.array(s['t']), np.array(s['volume'])
-    y_averaged = uniform_filter1d(y, size=15, mode='nearest')
-
-    # # ===== one graph per berry =====================================================================================
-    # mape = 100 * np.mean(np.abs((y_averaged - y) / y_averaged))
-    # ax = plt.subplot(K, K, i + 1)
-    # # col = phm_display.PALETTE[i]/255.
-    # # plt.plot(x, y, '.', color='k')
-    # plt.scatter(x, y, marker='.', c=np.array([cv2.cvtColor(np.uint8([[[h, 255, 140]]]),
-    #                                                        cv2.COLOR_HSV2RGB)[0][0] / 255. for h in s['hue']]))
-    # plt.plot(x, y_averaged, '-', color='r', linewidth=2)
-    # # plt.text(0.03, 0.97, 'q1={}\nq2={}'.format(round(q1, 2), round(q2, 2)),
-    # #          horizontalalignment='left', verticalalignment='top', transform=ax.transAxes)
-    # txt = 'MAPE={}%\na{} id{}'.format(round(mape, 2), int(angle), int(id))
-    # # txt = 'MAPE={}%'.format(round(mape, 2))
-    # plt.text(0.99, 0.03, txt, horizontalalignment='right', verticalalignment='bottom', transform=ax.transAxes)
-    # plt.xlim(0, max(selec['t']) + 2)
-
-    # ===== all berries in the same graph =============================================================================
-
-    # color
-    t, h = np.array(s['t']), np.array(s['hue'])
-    h_scaled = (h - np.median(h[:10])) / (np.median(h[-10:]) - np.median(h[:10]))
-    t_color = {}
-    for q in [0.1, 0.5, 0.9]:
-        k = next(k for k, val in enumerate(h_scaled) if val > q)
-        t_color[q] = t[k - 1] + (t[k] - t[k - 1]) * ((q - h_scaled[k - 1]) / (h_scaled[k] - h_scaled[k - 1]))
-
-    x0 = t_color[0.1]  # t0.1
-    y0 = y[np.argmin(np.abs(x0 - x))]  # V(t0.1)
-
-    y_scaled = y_averaged / np.max(y_averaged)
-    # ymax = np.max(y_averaged)
-    # y_scaled = (y_averaged - y0) / (ymax - y0)
-    # y_scaled = y_averaged / np.max(y_averaged)
-    # x_scaled = x - x0
-
-    plt.ylabel('V / Vmax')
-    plt.xlabel('Time (days)')
-    plt.plot(x, y_scaled, 'k-', linewidth=0.7, alpha=0.5)
-
-    # x0 = df_res[(df_res['plantid'] == plantid) & (df_res['berryid'] == berryid)].iloc[0]['t_h0.1']
-    # print(x0)
-    # plt.plot(x - x0, y_scaled, 'k-', linewidth=0.7, alpha=0.5)
-
-    q = 0.8  # 0.5
-    k = next(k for k, val in enumerate(y_scaled) if val > q and k >= np.argmin(y_scaled))
-    t_v05 = x[k - 1] + (x[k] - x[k - 1]) * ((q - y_scaled[k - 1]) / (y_scaled[k] - y_scaled[k - 1]))
-    df_res.append([plantid, row['angle'], row['id'], t_v05] + list(t_color.values()))
-
-
-    # plt.figure()
-    # plt.plot(x, y_scaled, 'k-', linewidth=1., alpha=1.)
-    # plt.plot(t_v05, 0.5, 'ko', markersize=10)
-    # plt.xlabel('t')
-    # plt.ylabel('(V - Vmin) / (Vmax - Vmin)')
-    # plt.title('Volume (V)')
-    # plt.figure()
-    # plt.plot(t, h_scaled, 'k-', linewidth=1., alpha=1.)
-    # plt.plot(t_color[0.1], 0.1, 'o', color='green', markersize=10)
-    # plt.plot(t_color[0.5], 0.5, 'o', color='darkred', markersize=10)
-    # plt.plot(t_color[0.9], 0.9, 'o', color='darkblue', markersize=10)
-    # plt.xlabel('t')
-    # plt.ylabel('(H - Hmin) / (Hmax - Hmin)')
-    # plt.title('Hue (H)')
-
-    # def cubic_spline(x, y):
-    #     x2 = (x - np.min(x)) / (np.max(x) - np.min(x))
-    #     y2 = (y - np.min(y)) / (np.max(y) - np.min(y))
-    #     tck = interpolate.splrep(x2, y2, s=0.0002*(len(x) - np.sqrt(2 * len(x))))
-    #     y_smooth = interpolate.splev(x2, tck)
-    #     return (y_smooth * (np.max(y) - np.min(y))) + np.min(y)
-    #
-    # plt.plot(x, cubic_spline(x, y_scaled), 'r-')
-
-    # =================================================================================================================
-
-
-df_res = pd.DataFrame(df_res, columns=['plantid', 'angle', 'berryid', 't_v0.5', 't_h0.1', 't_h0.5', 't_h0.9'])
-
-
-for q, col in zip([0.1, 0.5, 0.9], ['green', 'darkred', 'darkblue']):
-    _, ax = plt.subplots()
-    _.gca().set_aspect('equal', adjustable='box')
-    t1, t2 = np.array(df_res['t_v0.5']), np.array(df_res['t_h{}'.format(q)])
-    plt.plot([min(t1), max(t1)], [min(t2), max(t2)], '-', color='grey')
-    # non_outlier = np.max((t1, t2), axis=0) / np.min((t1, t2), axis=0) < 2
-    # print(len(non_outlier) - np.sum(non_outlier))
-    # t1, t2 = t1[non_outlier], t2[non_outlier]
-    rmse = np.sqrt(np.sum((t1 - t2) ** 2) / len(t1))
-    r2 = r2_score(t1, t2)
-    bias = np.mean(t2 - t1)
-    a, b = np.polyfit(t1, t2, 1)
-    plt.plot([min(t1), max(t1)], a * np.array([min(t1), max(t1)]) + b, '--', color=col, label=f'y = {a:.{2}f}x {b:+.{2}f}')
-    print(q, [round(k, 2) for k in [rmse, r2, bias]])
-    plt.plot(t1, t2, 'o', color=col, alpha=0.3)
-    plt.xlabel('t(V=0.5) (days)')
-    plt.ylabel('t(Hue={}) (days)'.format(q))
-    plt.text(0.05, 0.95, 'R² = {}'.format(round(r2, 2)),
-         fontsize=15, horizontalalignment='left', verticalalignment='top', transform=ax.transAxes)
-
-# a_min = np.min(gb['area'] / np.max(gb['area']))
-#
-# plt.plot(x, y, 'k.-')
-# plt.plot(x, y / np.median(sorted(f(x))[-10:]), 'k.-')
-# plt.plot(x, f(x) / np.median(sorted(f(x))[-10:]), 'k-')
-#
-# plt.plot(x, f(x), 'r-')
-#
-# ymin = np.median(f(x)[:5])
-# ymax = np.median(sorted(f(x))[-5:])
-# y2 = (f(x) - ymin) / (ymax - ymin)
-# y2 = f(x) / ymin
-# plt.plot(x, f(x) / ymin, 'k-')
-
-# ===== color = f(t) ==================================================================================================
-
-#fig, axs = plt.subplots(2, 5)
-plt.figure()
-K = 10
-# df_berry_selec = df_berry.sort_values('n', ascending=False).iloc[(1 * K ** 2):(2 * K ** 2)]
-# df_berry_selec = df_berry.sample(K ** 2)
-# df_berry_selec = df_berry[df_berry['n'] > 40].sort_values('mape', ascending=True)[::1].iloc[:(K ** 2)]
-# df_berry_selec = df_berry.sort_values('n', ascending=False).iloc[:(K ** 2)].sort_values('mape')
-
-for i, (_, row) in enumerate(df_berry_selec.iterrows()):
-    s = selec[(selec['angle'] == row['angle']) & (selec['berryid'] == row['id'])].sort_values('t')
-
-    x, y = np.array(s['t']), np.array(s['hue'])
-    y_averaged = uniform_filter1d(y, size=5, mode='nearest')
-
-    mape = 100 * np.mean(np.abs((y_averaged - y) / y_averaged))
-
-    # # one graph per berry (COLOR)
-    # ax = plt.subplot(K, K, i + 1)
-    # plt.xlim((0, 2 + np.max(selec['t'])))
-    # plt.ylim((25, 160))
-    # plt.plot(x, y, 'k.', linewidth=1)
-    # # plt.text(0.99, 0.03, 'a{} id{}'.format(int(row['angle']), int(row['id'])),
-    # #          horizontalalignment='right', verticalalignment='bottom', transform=ax.transAxes)
-
-    # all beries
-    y = (y - np.median(y[:10])) / (np.median(y[-10:]) - np.median(y[:10]))
-    # q = 0.1
-    # k = next(k for k, val in enumerate(y) if val > q)
-    # x01 = x[k - 1] + (x[k] - x[k - 1]) * ((q - y[k - 1]) / (y[k] - y[k - 1]))
-    # x = x - x01
-    plt.plot(x, y, 'k-', linewidth=0.7, alpha=0.5)
-    plt.xlabel('Time (days)')
-    plt.ylabel('Centered hue')
-
-    gb = selec.groupby('task')[['hue', 't']].agg(['median', 'mean']).reset_index().sort_values(('t', 'mean'))
-    for metrics, col in zip(['mean', 'median'], ['blue', 'red']):
-        xm = np.array(gb['t']['mean'])
-        ym = np.array(gb['hue'][metrics])
-        ym = (ym - np.median(ym[:10])) / (np.median(ym[-10:]) - np.median(ym[:10]))
-        # q = 0.1
-        # k = next(k for k, val in enumerate(ym) if val > q)
-        # x01 = xm[k - 1] + (xm[k] - xm[k - 1]) * ((q - ym[k - 1]) / (ym[k] - ym[k - 1]))
-        # xm = xm - x01
-        plt.plot(xm, ym, '-', color=col)
-
-
-
-    selec2 = selec.copy()
-    selec2['hue'] = ((180 - np.array(selec2['hue'])) - 100) % 180
-    selec2['black'] = (selec2['hue'] > 50)
-    gb1 = selec2.groupby('task')[['hue', 't']].median().reset_index().sort_values('t')
-    plt.plot(gb1['t'], gb1['hue'], 'r-', linewidth=2)
-    gb2 = selec2.groupby('task')[['hue', 't']].mean().reset_index().sort_values('t')
-    plt.plot(gb2['t'], gb2['hue'], 'b-', linewidth=2)
-    gb3 = selec2.groupby('task')[['black', 't']].mean().reset_index().sort_values('t')
-    black = (gb3['black'] * (np.max(gb2['hue'] - np.min(gb2['hue'])))) + np.min(gb2['hue'])
-    plt.plot(gb3['t'], black, '-', color='lightgreen', linewidth=3)
-
-# ===== visu one berry over time ======================================================================================
-
-# berryid, angle = 4, 270
-# berryid, angle = 26, 30
-# berryid, angle = 38, 330
-berryid, angle = 40, 330
-selec_index = index[(index['exp'] == exp) & (index['plantid'] == plantid) & (index['imgangle'] == angle)]
-
-s = selec[(selec['angle'] == angle) & (selec['berryid'] == berryid)].sort_values('timestamp')
-# s.loc[s['timestamp'] > 1592571441, ['ell_x', 'ell_y']] -= np.array([-4.2, -437.8])
-
-plt.figure()
-y = ((180 - s['hue']) - 100) % 180
-plt.scatter(s['t'], y, marker='o', c=np.array([cv2.cvtColor(np.uint8([[[h, 255, 140]]]),
-                                                       cv2.COLOR_HSV2RGB)[0][0] / 255. for h in s['hue']]))
-# y_averaged = uniform_filter1d(y, size=15, mode='nearest')
-# mape = 100 * np.median(np.abs((y_averaged - y) / y_averaged))
-# print(mape)
-# plt.plot(x, y_averaged, '-', color='r', linewidth=2)
-plt.xlabel('Time (days)')
-plt.ylabel('Centered Hue (°)')
-
-plt.figure()
-x, y = s['t'], s['volume'] / 100000
-plt.scatter(x, y, marker='o', c=np.array([cv2.cvtColor(np.uint8([[[h, 255, 140]]]),
-                                                       cv2.COLOR_HSV2RGB)[0][0] / 255. for h in s['hue']]))
-y_averaged = uniform_filter1d(y, size=15, mode='nearest')
-mape = 100 * np.median(np.abs((y_averaged - y) / y_averaged))
-print(mape)
-plt.plot(x, y_averaged, '-', color='r', linewidth=2)
-plt.xlim(0, max(selec['t']) + 2)
-plt.xlabel('Time (days)')
-plt.ylabel('Volumne (10^5 px³)')
-
-px_list = []
-imgs = []
-for k, (_, row) in enumerate(s.iterrows()):
-# for k, (_, row) in enumerate(s.iloc[[43, 61, 67, 78, 100]].iterrows()):
-
-    print(k)
-
-    # plt.figure('{}_{}'.format(row['task'], round(row['hue'], 2)))
-
-    # plt.gca().set_aspect('equal', adjustable='box')
-    # plt.ylim((np.min(selec['ell_y']), np.max(selec['ell_y'])))
-    task = row['task']
-    path = 'Z:/{}/{}/{}.png'.format(exp, task, selec_index[selec_index['taskid'] == task].iloc[0]['imgguid'])
-    img = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
-
-    x, y, w, h, a = row['ell_x'], row['ell_y'], row['ell_w'], row['ell_h'], row['ell_a']
-    ell = ellipse_interpolation(x, y, w, h, a, n_points=100)
-    # plt.plot(ell[0], ell[1], '-', color=('red' if row['berryid'] == berryid else 'blue'))
-
-    mask = cv2.ellipse(np.float32(img[:, :, 0] * 0), (round(x), round(y)),
-                       (round((w * 0.85) / 2), round((h * 0.85) / 2)), a, 0., 360, (1), -1)
-    px = img[mask == 1]  # r, g, b
-    px_hsv = cv2.cvtColor(np.array([px]), cv2.COLOR_RGB2HSV)[0]
-    px_lab = cv2.cvtColor(np.array([px]).astype(np.uint8), cv2.COLOR_RGB2LAB)[0].astype(np.float)
-    px_lab[:, 0] = px_lab[:, 0] / 255 * 100
-    px_lab[:, 1] = px_lab[:, 1] - 128
-    px_lab[:, 2] = px_lab[:, 2] - 128
-
-    hue = circmean(px_hsv[:, 0], low=0, high=180)
-    cols = [hue] + list(np.mean(np.concatenate((px_hsv[:, 1:], px_lab), axis=1), axis=0))
-    px_list.append(cols)
-
-    # hue2 = hue.astype(np.float)  # hue was in uint8 i.e. can't go outside [0, 255]
-
-    img = cv2.ellipse(img, (round(x), round(y)), (round(w / 2), round(h / 2)), a, 0., 360, [255, 0, 0], 1)
-
-    img = img[(round(y) - 45):(round(y) + 45), (round(x) - 45):(round(x) + 45)]
-    img = cv2.resize(img, (360, 360))
-    img2 = img.copy()
-    img2[325:, 250:] *= 0
-    img2 = cv2.putText(img2, 't={}'.format(round(row['t'], 1)),
-                       (260, 350), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 1, cv2.LINE_AA)
-
-    # io.imsave('{}.png'.format(k+5), img2)
-    # plt.figure()
-    # plt.imshow(img2)
-
-    imgs.append(img2)
-
-    # plt.xlim((x - 45, x + 45))
-    # plt.ylim((y - 45, y + 45))
-    # plt.plot(ell[0], ell[1], '-', color='red')
-
-imgs_gif = (Image.fromarray(img) for img in imgs)
-fps = 6
-img = next(imgs_gif)
-img.save(fp='data/videos/berry_individual/{}_{}_{}_{}fps.gif'.format(plantid, angle, berryid, fps),
-         format='GIF', append_images=imgs_gif, save_all=True, duration=1000 / fps, loop=0)
-
-px = np.array(px_list)
-plt.plot(s['t'], ((180 - px[:, 0]) - 100) % 180, 'k.', label='((180 - h) + 100) % 180')
-
-
-CIRG = (180-H) / (L*+C)
-# CIRG2 : CIRG but H (hue) was calculated considering the hue values included between 360° and 270° as negative
-
-L, a, b = [px[:, k] for k in [3, 4, 5]]
-h = np.degrees(np.arctan(b / a))
-C = np.sqrt((a ** 2) + (b ** 2))
-CIRWG = np.radians(h) / (L * b) * 100
-
-plt.plot(s['t'], px[:, 0], 'k.-')
-plt.plot(s['t'], h, 'b.-')
-
-plt.plot(s['t'], L, 'r.', label='L*')
-plt.plot(s['t'], a, 'g.', label='a*')
-plt.plot(s['t'], b, 'b.', label='b*')
-plt.legend()
-
-plt.xlabel('Time (days)')
-plt.ylabel('Mean pixel value')
-plt.legend()
-
-plt.plot(np.arange(len(px)), px[:, 5] - px[:, 2], '.-', color='black', label='hue')
-plt.plot(np.arange(len(px)), px[:, 3], '.-', color='black', label='hue')
-
-# ===== color = f(t) =================================================================================================
-
-# selection of one grape
-selec_index = index[(index['exp'] == exp) & (index['plantid'] == plantid)]
-
-df_berry_selec = df_berry[df_berry['n'] > 100].sort_values('mape', ascending=True)[:100]
-
-
-pixels = {}
-# angle loop
-for angle in [k * 30 for k in range(12)]:
-
-    pixels[angle] = {}
-    s_index = selec_index[selec_index['imgangle'] == angle]
-    s_berries = df_berry_selec[df_berry_selec['angle'] == angle]
-
-    # task loop
-    for k, (_, row_index) in enumerate(s_index.iterrows()):
-
-        pixels[angle][row_index['taskid']] = {}
-
-        img = cv2.cvtColor(cv2.imread('Z:/{}/{}/{}.png'.format(exp, row_index['taskid'], row_index['imgguid'])),
-                           cv2.COLOR_BGR2RGB)
-
-        s_ell = selec[(selec['angle'] == angle) & (selec['task'] == row_index['taskid']) &
-                      (selec['berryid'].isin(s_berries['id']))]
-
-        s_ell.loc[s_ell['timestamp'] > 1592571441, ['ell_x', 'ell_y']] -= np.array([-4.2, -437.8])
-
-        # berry loop
-        for _, row_ell in s_ell.iterrows():
-
-            print(angle, k, int(row_ell['berryid']))
-            x, y, w, h, a = row_ell[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
-            mask = cv2.ellipse(np.float32(img[:, :, 0] * 0), (round(x), round(y)), (round(w / 2), round(h / 2)),
-                               a, 0., 360, (1), -1)
-            px = img[mask == 1]  # r, g, b
-            px_hsv = cv2.cvtColor(np.array([px]), cv2.COLOR_RGB2HSV)[0]
-            pixels[angle][row_index['taskid']][row_ell['berryid']] = np.concatenate((px, px_hsv), axis=1)
-
-df_pixels = []
-for angle in pixels.keys():
-    for task in pixels[angle].keys():
-        t = np.mean(selec[selec['task'] == task]['t'])
-        print(task, t)
-        for berryid in pixels[angle][task].keys():
-            px = pixels[angle][task][berryid]
-            df_pixels.append([angle, t, berryid] + list(np.mean(px, axis=0)))
-df_pixels = pd.DataFrame(df_pixels, columns=['angle', 't', 'id', 'r', 'g', 'b', 'h', 's', 'v'])
-
-plt.figure()
-for angle in df_pixels['angle'].unique():
-    s0 = df_pixels[df_pixels['angle'] == angle]
-    for berryid in s0['id'].unique()[::1]:
-        s = s0[s0['id'] == berryid].sort_values('t')
-        plt.plot(s['t'], s['h'], 'b.-')
-
-
-for i, (_, row) in enumerate(df_berry_selec.iterrows()):
-
-    # selection of a berry + angle
-    angle, id, q1, q2 = row['angle'], row['id'], (row['q1'] - 1) * 100, row['q2']
-    s = selec[(selec['angle'] == angle) & (selec['berryid'] == id)]
-
-    df_color = []
-
-    for _, row_ell in s.iterrows():
-
-        # task = row_ell['task']
-        # path = 'Z:/{}/{}/{}.png'.format(exp, task, s_index[s_index['taskid'] == task].iloc[0]['imgguid'])
-        # image = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
-        #
-        # x, y, w, h, a = row_ell[['ell_x', 'ell_y', 'ell_w', 'ell_h', 'ell_a']]
-        #
-        # mask = cv2.ellipse(np.float32(image[:, :, 0] * 0), (round(x), round(y)), (round(w / 2), round(h / 2)),
-        #                    a, 0., 360, (1), -1)
-        # pixels = image[mask == 1]  # r, g, b
-        # pixels_hsv = cv2.cvtColor(np.array([pixels]), cv2.COLOR_RGB2HSV)[0]
-
-        df_color.append([row_ell['t']] + list(np.mean(pixels, axis=0)) + list(np.mean(pixels_hsv, axis=0)))
-
-    df_color = pd.DataFrame(df_color, columns=['t', 'r', 'g', 'b', 'h', 's', 'v'])
-
-    for i, col in enumerate(['r', 'g', 'b', 'orange', 'black', 'grey']):
-        plt.plot(df_color['t'], df_color.iloc[:, i + 1], '-')
 
-
-
-
-
-
-
+fig.tight_layout()
+
+plt.savefig('data/grapevine/paper/final_b.png')
+
+
+# _____ plot volume hists _____
+
+
+fig = plt.figure(figsize=(6, 6), dpi=100)
+
+plt.subplot(1, 2, 1)
+plt.ylim((min(v_0) * 0.95, max(v_max) * 1.05))
+plt.hist(v_0, 15, orientation='horizontal', color='grey')
+plt.gca().tick_params(axis='both', which='major', labelsize=25)
+plt.gca().axes.xaxis.set_ticklabels([])
+plt.gca().axes.get_xaxis().set_visible(False)
+ax.tick_params(axis='both', which='major', labelsize=30)
+plt.title(r'$V_0$' + ' (mL)', fontsize=25)
+
+
+plt.subplot(1, 2, 2)
+plt.ylim((min(v_0) * 0.95, max(v_max) * 1.05))
+plt.hist(v_max, 25, orientation='horizontal', color='grey')
+plt.gca().tick_params(axis='both', which='major', labelsize=25)
+plt.gca().axes.xaxis.set_ticklabels([])
+plt.gca().axes.get_xaxis().set_visible(False)
+ax.tick_params(axis='both', which='major', labelsize=30)
+plt.title(r'$V_{max}$' + ' (mL)', fontsize=25)
+
+fig.tight_layout()
+
+plt.savefig('data/grapevine/paper/final_c.png')
+
+
+# _____ color ______
+
+# single berry
+t, h = [np.array(s['t']) for s in trajs], [np.array(s['h']) for s in trajs]
+h_0 = np.array([np.median(hi[:25]) for hi in h])
+h_n = np.array([np.median(hi[-25:]) for hi in h])
+hs = [(hi - hi_0) / (hi_n - hi_0) for hi, hi_0, hi_n in zip(h, h_0, h_n)]
+hs = [median_filter(hsi, size=3, mode='reflect') for hsi in hs]
+t_h005 = np.array([y_to_x(ti, hsi, 0.05) for ti, hsi in zip(t, hs)])
+t_h05 = np.array([y_to_x(ti, hsi, 0.5) for ti, hsi in zip(t, hs)])
+
+# _____ plot color main _____
+
+fig = plt.figure(figsize=(13, 6), dpi=100)
+plt.gca().tick_params(axis='both', which='major', labelsize=25)
+for k in range(n):
+    plt.plot(t[k], hs[k], '-', color='grey', linewidth=1., alpha=0.7)
+plt.ylim((-0.07, 1.07))
+plt.plot([min(t_h005), max(t_h005)], [0.05, 0.05], '--', color='forestgreen')
+plt.xlabel('Time (days)', fontsize=25)
+plt.ylabel(r'$H_{s} = (H - H_0) / (H_n - H_0)$', fontsize=25)
+plt.gca().tick_params(axis='both', which='major', labelsize=20)
+plt.gca().yaxis.set_ticks_position('both')
+plt.gca().xaxis.set_ticks_position('both')
+plt.gca().tick_params(axis='both', which='major', direction='in')  # axis number size
+plt.gca().annotate(f'n = {n}', xy=(0.98, 0.02), color='blue',
+                   xycoords='axes fraction', fontsize=25, horizontalalignment='right', verticalalignment='bottom')
+fig.tight_layout()
+
+plt.savefig('data/grapevine/paper/final_d.png')
+
+# _____ scatter _____
+
+fig = plt.figure(figsize=(6, 6), dpi=100)
+x, y = t_v05, t_h005
+plt.plot(x, y, 'o', color='grey')
+r2 = linregress(x, y)[2] ** 2
+a, b = np.polyfit(x, y, 1)
+plt.plot([min(x), max(x)], a * np.array([min(x), max(x)]) + b, '--', color='b', label=f'y = {a:.{2}f}x {b:+.{2}f}')
+plt.legend(prop={'size': 20})
+plt.xlabel(r'$t(V_s = 0.5)$' + ' (days)', fontsize=25)
+plt.ylabel(r'$t(H_s = 0.05)$' + ' (days)', fontsize=25)
+plt.gca().tick_params(axis='both', which='major', labelsize=20)
+plt.gca().yaxis.set_ticks_position('both')
+plt.gca().xaxis.set_ticks_position('both')
+plt.gca().tick_params(axis='both', which='major', direction='in')  # axis number size
+plt.gca().annotate(f'R² = {r2:.2f}', xy=(0.98, 0.02), color='blue',
+                   xycoords='axes fraction', fontsize=25, horizontalalignment='right', verticalalignment='bottom')
+
+fig.tight_layout()
+
+plt.savefig('data/grapevine/paper/final_e.png')
+
+# _____ hist t _____
+
+fig = plt.figure(figsize=(6, 6), dpi=100)
+plt.hist(t_h005, 15, color='blue')
+plt.gca().tick_params(axis='both', which='major', labelsize=25)
+plt.gca().axes.yaxis.set_ticklabels([])
+plt.gca().axes.get_yaxis().set_visible(False)
+plt.gca().tick_params(axis='both', which='major', labelsize=30)
+plt.title(r'$t(H_s = 0.05)$' + ' (days)', fontsize=25)
+
+# _____ hist h _____
+
+fig = plt.figure(figsize=(6, 6), dpi=100)
+plt.ylim(30, 50)
+plt.hist(h_0, 15, orientation='horizontal', color='grey')
+plt.gca().tick_params(axis='both', which='major', labelsize=25)
+plt.gca().axes.xaxis.set_ticklabels([])
+plt.gca().axes.get_xaxis().set_visible(False)
+plt.gca().tick_params(axis='both', which='major', labelsize=30)
+plt.title(r'$H_0$', fontsize=25)
+
+fig = plt.figure(figsize=(6, 6), dpi=100)
+plt.ylim(127.5, 147.5)
+plt.hist(h_n, 15, orientation='horizontal', color='grey')
+plt.gca().tick_params(axis='both', which='major', labelsize=25)
+plt.gca().axes.xaxis.set_ticklabels([])
+plt.gca().axes.get_xaxis().set_visible(False)
+plt.gca().tick_params(axis='both', which='major', labelsize=30)
+plt.title(r'$H_n$', fontsize=25)
+
+fig.tight_layout()
 
 
 

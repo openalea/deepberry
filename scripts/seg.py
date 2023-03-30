@@ -3,7 +3,6 @@ Quick berry detection & segmentation on an image
 """
 
 import cv2
-import numpy as np
 import matplotlib.pyplot as plt
 
 from deepberry.src.openalea.deepberry.utils import ellipse_interpolation

@@ -7,6 +7,6 @@
 #           http://www.cecill.info/licences/Licence_CeCILL-C_V1-en.html
 #
 # ==============================================================================
-rom .version import __version__
+from .version import __version__
 
 __version__ = __version__

@@ -7,7 +7,7 @@ from openalea.deepberry.ellipse_segmentation import load_berry_models, VIGNETTE_
     berry_detection, VIGNETTE_SIZE_SEG, berry_segmentation
 
 pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-datadir = os.path.join(pkg_dir, 'examples', 'data')
+datadir = os.path.join(pkg_dir, 'doc', 'examples', 'data')
 
 
 @pytest.fixture

@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools"] # Change the restricted version when updating from numpy 1.x
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openalea.deepberry"
+authors = [
+  { name = "Benoit Daviet"},
+]
+description = "Segmentation and time-lapse tracking of grapevine berries"
+license = {file = "LICENSE.txt"}
+requires-python = ">=3.9"
+classifiers = [
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: CeCILL-C License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
+]
+dynamic = ["version", "readme"]
+dependencies = [
+  "tensorflow",
+  "numpy",
+  "pandas",
+  "scipy",
+  "ipython",
+  "opencv-python",
+  "opencv-contrib-python",
+  "pycpd",
+  "matplotlib",
+  "shapely",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-cov"]
+doc = [
+  "pydata-sphinx-theme",
+  "myst-parser",
+  "sphinx-favicon",
+  "ipykernel",
+  "ipyvolume",
+  "ipython_genutils",
+  "nbsphinx",
+]
+training = [
+    "segmentation-models"
+]
+validation = [
+    "object_detection_metrics"
+]
+
+[project.urls]
+Homepage = "https://openalea.readthedocs.io/"
+"Bug Tracker" = "https://forgemia.inra.fr/phenome/deepberry/issues"
+Discussions = "https://forgemia.inra.fr/phenome/deepberry/discussions"
+Changelog = "https://forgemia.inra.fr/phenome/deepberry/releases"
+
+[tool.setuptools.dynamic]
+version = {attr = "openalea.deepberry.__version__"}
+readme = {file = ["README.md"]}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["openalea.*"]
+
+[tool.setuptools.package-data]
+"*" = ["*"]

@@ -1,0 +1,54 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Daviet"
+  given-names: "Benoit"
+  orcid: "https://orcid.org/0000-0003-2866-8515"
+- family-names: "Fournier"
+  given-names: "Christian"
+  orcid: "https://orcid.org/0000-0001-7098-8278"
+- family-names: "Cabrera-Bosquet"
+  given-names: "Llorenç"
+  orcid: "https://orcid.org/0000-0002-2147-2846"
+- family-names: "Simonneau"
+  given-names: "Thierry"
+  orcid: "https://orcid.org/0000-0001-5636-9534"
+- family-names: "Cafier"
+  given-names: "Maxence"
+- family-names: "Romieu"
+  given-names: "Charles"
+  orcid: "https://orcid.org/0000-0003-2607-8335"
+title: "Deepberry: deep-learning algorithm to detect, segment and track berries on grapewine images"
+version: 1.0.0
+date-released: 2023-07-11
+url: "https://github.com/openalea/deepberry"
+
+preferred-citation:
+    type: article
+    authors:
+	- family-names: "Daviet"
+	  given-names: "Benoit"
+	  orcid: "https://orcid.org/0000-0003-2866-8515"
+	- family-names: "Fournier"
+	  given-names: "Christian"
+	  orcid: "https://orcid.org/0000-0001-7098-8278"
+	- family-names: "Cabrera-Bosquet"
+	  given-names: "Llorenç"
+	  orcid: "https://orcid.org/0000-0002-2147-2846"
+	- family-names: "Simonneau"
+	  given-names: "Thierry"
+	  orcid: "https://orcid.org/0000-0001-5636-9534"
+	- family-names: "Cafier"
+	  given-names: "Maxence"
+	- family-names: "Romieu"
+	  given-names: "Charles"
+	  orcid: "https://orcid.org/0000-0003-2607-8335"
+
+    title: "Ripening dynamics revisited: an automated method to track the development of asynchronous berries on time-lapse images"
+    doi: "10.1186/s13007-023-01125-8"
+    journal: "Plant Methods"
+	volume: '19'
+	pages: '146'
+    year: 2023
+	url: "https://plantmethods.biomedcentral.com/articles/10.1186/s13007-023-01125-8"
+

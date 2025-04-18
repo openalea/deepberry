@@ -1,6 +1,6 @@
-## Deepberry : segmentation and time-lapse tracking of grapevine berries
+# Deepberry : segmentation and time-lapse tracking of grapevine berries
 
-### Installation from source
+## Installation from source
 
     # for prediction
     mamba create -n grapevine -c conda-forge python=3.12 (3.9>=version<3.13) 
@@ -20,7 +20,7 @@
     # (optional) for model validation metrics:
     pip install .[validation]
 
-### Maintainers
+## Maintainers
 
 * Benoit Daviet (b.daviet@hotmail.com)
 * Fournier Christian (christian.fournier@inrae.fr)

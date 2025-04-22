@@ -44,8 +44,8 @@ doc = [
   "pydata-sphinx-theme",
   "myst-parser",
   "sphinx-favicon",
+  "sphinx-copybutton",
   "ipykernel",
-  "ipyvolume",
   "ipython_genutils",
   "nbsphinx",
 ]

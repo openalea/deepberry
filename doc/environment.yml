@@ -1,4 +1,4 @@
-name: phenomenal
+name: deepberry
 channels:
   - conda-forge
 dependencies:
